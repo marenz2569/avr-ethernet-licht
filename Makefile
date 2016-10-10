@@ -1,6 +1,6 @@
 DEVICE     = atmega328p
 CLOCK      = 16000000
-OBJECTS    = main.o enc28j60.o light_ws2812.o ws2812.o spi.o ethernet_protocols.o cos_approx.o
+OBJECTS    = src/main.o src/enc28j60.o src/light_ws2812.o src/ws2812.o src/spi.o src/ethernet_protocols.o src/cos_approx.o
 LIBS       = 
 LIBDIR     = 
 LIBINCLUDE = 
@@ -16,26 +16,21 @@ all:	main.hex memory-used
 	$(COMPILE) -c $< -o $@ $(LIBINCLUDE)
 
 flash:	all
-	python /home/marenz/programming/avr/arduino_scripts/arduino_reset.py /dev/ttyUSB0
-	$(AVRDUDE) -U flash:w:main.hex
-
-fuse:
-	$(AVRDUDE) $(FUSES)
-
-install: flash fuse
+	sudo python -c 'import sys, serial, time; ser = serial.Serial(sys.argv[1], 57600); ser.setDTR(0); time.sleep(0.1); ser.setDTR(1); ser.close()' /dev/ttyUSB0
+	sudo $(AVRDUDE) -U flash:w:src/main.hex
 
 clean:
-	rm -f main.hex main.elf $(OBJECTS)
+	rm -f src/main.hex src/main.elf $(OBJECTS)
 
 main.elf: $(OBJECTS)
-	$(COMPILE) -o main.elf $(OBJECTS) -static $(LIBDIR) $(LIBS)
+	$(COMPILE) -o src/main.elf $(OBJECTS) -static $(LIBDIR) $(LIBS)
 
 main.hex: main.elf
-	rm -f main.hex
-	avr-objcopy -j .text -j .data -O ihex main.elf main.hex
+	rm -f src/main.hex
+	avr-objcopy -j .text -j .data -O ihex src/main.elf src/main.hex
 
 disasm:	main.elf
-	avr-objdump -D main.elf
+	avr-objdump -D src/main.elf
 
 memory-used: main.elf
-	avr-size --mcu=$(DEVICE) -C main.elf
+	avr-size --mcu=$(DEVICE) -C src/main.elf

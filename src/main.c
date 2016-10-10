@@ -5,6 +5,7 @@
 #include <string.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
+#include <stdio.h>
 
 #include "ws2812.h"
 #include "ws2812_config.h"
@@ -30,21 +31,11 @@ volatile uint8_t change       = 1,
 #define MACRO_TO_STRING(x) \
         NAME(x)
 
-#define rep(m, e) \
-        do { \
-                enc28j60_buffer[UDP_DATA_P] = m; \
-                uint16_t len = strlen_P(PSTR(e)); \
-                enc28j60_buffer[UDP_DATA_P+1] = len >> 8; \
-                enc28j60_buffer[UDP_DATA_P+2] = len; \
-                memcpy_P(enc28j60_buffer + UDP_DATA_P + 3, PSTR(e), len); \
-                makeUdpReply(len + 3, mymac, myip, 49152); \
-        } while (0)
-
 #define err(e) \
-        rep('e', e)
+        send_reply('e', e)
 
 #define ack(m) \
-        rep(m, "")
+        send_reply(m, "")
 
 #define checklen(x) \
         (cmdlen >= x)
@@ -55,6 +46,16 @@ volatile uint8_t change       = 1,
 
 #define LEDS_LOOP_END \
         }
+
+void send_reply(char command, char message[])
+{
+	enc28j60_buffer[UDP_DATA_P] = command;
+	uint16_t len = strlen(message);
+	enc28j60_buffer[UDP_DATA_P+1] = len >> 8;
+	enc28j60_buffer[UDP_DATA_P+2] = len;
+	memcpy(enc28j60_buffer + UDP_DATA_P + 3, message, len);
+	makeUdpReply(len + 3, mymac, myip, 49152);
+}
 
 void main(void)
 {
@@ -128,11 +129,23 @@ void main(void)
 /* enc28j60 interrupt */
 ISR(INT0_vect)
 {
+	uint16_t plen, i, datalen, cmdlen, offset, start;
+	uint8_t *data;
+	struct {
+		uint8_t id[2];
+		rgb color;
+	} s_led;
+	char leds_string[5],
+	     max_protolen_string[5];
+
+	sprintf(leds_string, "%d", ws2812_LEDS);
+	sprintf(max_protolen_string, "%d", ENC28J60_MAX_DATALEN);
+
 	enc28j60_writeOp(ENC28J60_BIT_FIELD_CLR, EIE, EIE_INTIE);
 
 	/* parse individual packets */
 	while (enc28j60_readReg(EPKTCNT)) {
-		uint16_t plen = enc28j60_packetReceive();
+		plen = enc28j60_packetReceive();
 
 		if (eth_type_is_arp_and_my_ip(plen, myip) &&
 		    enc28j60_buffer[ETH_ARP_OPCODE_L_P] == ETH_ARP_OPCODE_REQ_L_V) {
@@ -140,13 +153,12 @@ ISR(INT0_vect)
 		} else if (eth_type_is_ip_and_my_ip(plen, myip, broadcast) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_UDP_V &&
 		           enc28j60_buffer[UDP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[UDP_DST_PORT_L_P] == 0x00) {
-			uint16_t datalen = (uint16_t) (enc28j60_buffer[UDP_LEN_H_P] << 8) + enc28j60_buffer[UDP_LEN_L_P];
+			datalen = (uint16_t) (enc28j60_buffer[UDP_LEN_H_P] << 8) + enc28j60_buffer[UDP_LEN_L_P];
 			datalen = (datalen>(ENC28J60_BUFFERSIZE)?(ENC28J60_BUFFERSIZE):datalen);
 			datalen -= UDP_HEADER_LEN;
-			const uint8_t *data = enc28j60_buffer + UDP_DATA_P;
-			uint16_t cmdlen = data[2] | data[1] << 8;
+			data = enc28j60_buffer + UDP_DATA_P;
+			cmdlen = data[2] | data[1] << 8;
 			if (datalen > 2 && cmdlen == (datalen - 3)) {
-				uint16_t i;
 				switch (modi = data[0]) {
 				/* allset */
 				case 'a':
@@ -165,9 +177,10 @@ ISR(INT0_vect)
 					ack('a');
 					break;
 				/* information */
+				sprintf(leds_string, "%d", ws2812_LEDS);
 				case 'i':
 					modi = oldModi;
-					rep('i', "{\"name\":\"frickel\",\"leds\":"MACRO_TO_STRING(ws2812_LEDS)",\"max_protolen\":"MACRO_TO_STRING(ENC28J60_MAX_DATALEN)"}");
+					send_reply('i', strcat(strcat(strcat(strcat("{\"name\":\"frickel\",\"leds\":", leds_string), ",\"max_protolen\":"), max_protolen_string), "}"));
 					break;
 				case 'n':
 					if (!checklen(1)) {
@@ -199,18 +212,19 @@ ISR(INT0_vect)
 						err("need at least 5 arguments");
 						break;
 					}
-					uint16_t offset = (uint16_t) (data[3] >> 8) | data[4];
+					offset = (uint16_t) (data[3] >> 8) | data[4];
 					if (!(offset < ws2812_LEDS)) {
 						err("out of range");
 					}
 					cmdlen -= 2;
 					cmdlen -= cmdlen % 3 + 1;
-					uint16_t start = enc28j60_curPacketPointer + 6 + UDP_DATA_P + 5;
+					start = enc28j60_curPacketPointer + 6 + UDP_DATA_P + 5;
 					enc28j60_dma(start, start + cmdlen, offset * 3 + ENC28J60_HEAP_START);
 					ws2812_locked = 1;
 					change = 1;
 					ack('r');
 					break;
+				/* set */
 				case 's':
 					if (!checklen(5)) {
 						err("need at least 5 arguments");
@@ -218,10 +232,6 @@ ISR(INT0_vect)
 					}
 					cmdlen -= cmdlen % 5;
 					cmdlen = cmdlen / 5;
-					struct {
-						uint8_t id[2];
-						rgb color;
-					} s_led;
 					enc28j60_writeReg16(ERDPTL, enc28j60_curPacketPointer + 6 + UDP_DATA_P + 3);
 					while (cmdlen--) {
 						enc28j60_readBuf(5, (uint8_t *) &s_led);

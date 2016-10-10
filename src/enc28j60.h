@@ -5,6 +5,9 @@
 
 #include "enc28j60_config.h"
 
+#define ENC28J60_enable		ENC28J60_CS_PORT &= ~_BV(ENC28J60_CS_PIN) 
+#define ENC28J60_disable	ENC28J60_CS_PORT |= _BV(ENC28J60_CS_PIN)
+
 uint16_t enc28j60_curPacketPointer;
 
 uint8_t enc28j60_buffer[ENC28J60_BUFFERSIZE];

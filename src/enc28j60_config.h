@@ -6,21 +6,15 @@
 #define ENC28J60_CS_PIN		PORTB2
 
 enum {
-	ENC28J60_BUFFERSIZE = 101
+	ENC28J60_BUFFERSIZE = 200
 };
 
-enum {
-	ENC28J60_MAX_FRAMELEN = 966
-};
-
-enum {
-	ENC28J60_MAX_DATALEN = (ENC28J60_MAX_FRAMELEN - 60 - 3)
-};
+#define ENC28J60_MAX_FRAMELEN_M 966
 
 /* 4.5kb receive buffer */
 enum {
 	ENC28J60_RX_START = 0,
-	ENC28J60_RX_END   = ((6 + ENC28J60_MAX_FRAMELEN) * 3 + 1)
+	ENC28J60_RX_END   = ((6 + ENC28J60_MAX_FRAMELEN_M) * 3 + 1)
 };
 
 /* 0.5kb transmit buffer */

@@ -14,7 +14,7 @@
 #include "enc28j60_defs.h"
 #include "ethernet_protocols.h"
 
-const uint8_t myip[]      = {172,23,92,247},
+const uint8_t myip[]      = {172,23,92,15},
               mymac[]     = {0x70,0x69,0x69,0x2D,0x30,0x31},
               broadcast[] = {172,23,92,255};
 

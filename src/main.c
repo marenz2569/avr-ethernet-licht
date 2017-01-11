@@ -32,10 +32,10 @@ volatile uint8_t change       = 1,
         NAME(x)
 
 #define err(e) \
-        send_reply('e', e)
+        plen = send_reply_P('e', PSTR(e))
 
 #define ack(m) \
-        send_reply(m, "")
+        plen = send_reply_P(m, PSTR(""))
 
 #define checklen(x) \
         (cmdlen >= x)
@@ -47,14 +47,14 @@ volatile uint8_t change       = 1,
 #define LEDS_LOOP_END \
         }
 
-void send_reply(char command, char message[])
+uint16_t send_reply_P(const char command, const char *message)
 {
-	enc28j60_buffer[UDP_DATA_P] = command;
-	uint16_t len = strlen(message);
-	enc28j60_buffer[UDP_DATA_P+1] = len >> 8;
-	enc28j60_buffer[UDP_DATA_P+2] = len;
-	memcpy(enc28j60_buffer + UDP_DATA_P + 3, message, len);
-	makeUdpReply(len + 3, mymac, myip, 49152);
+	enc28j60_buffer[TCP_OPTIONS_P] = command;
+	uint16_t len = strlen_P(message);
+	enc28j60_buffer[TCP_OPTIONS_P+1] = len >> 8;
+	enc28j60_buffer[TCP_OPTIONS_P+2] = len;
+	memcpy_P(enc28j60_buffer + TCP_OPTIONS_P + 3, message, len);
+	return len + 3;
 }
 
 void main(void)
@@ -129,17 +129,13 @@ void main(void)
 /* enc28j60 interrupt */
 ISR(INT0_vect)
 {
-	uint16_t plen, i, datalen, cmdlen, offset, start;
+	int16_t j;
+	uint16_t plen, i, datalen, cmdlen, offset, start, dat_p;
 	uint8_t *data;
 	struct {
 		uint8_t id[2];
 		rgb color;
 	} s_led;
-	char leds_string[5],
-	     max_protolen_string[5];
-
-	sprintf(leds_string, "%d", ws2812_LEDS);
-	sprintf(max_protolen_string, "%d", ENC28J60_MAX_DATALEN);
 
 	enc28j60_writeOp(ENC28J60_BIT_FIELD_CLR, EIE, EIE_INTIE);
 
@@ -147,17 +143,27 @@ ISR(INT0_vect)
 	while (enc28j60_readReg(EPKTCNT)) {
 		plen = enc28j60_packetReceive();
 
+		/* process ARP packets */
 		if (eth_type_is_arp_and_my_ip(plen, myip) &&
 		    enc28j60_buffer[ETH_ARP_OPCODE_L_P] == ETH_ARP_OPCODE_REQ_L_V) {
 			make_arp_answer_from_request(mymac, myip);
+		/* proccess TCP/IPv4 packets */
 		} else if (eth_type_is_ip_and_my_ip(plen, myip, broadcast) &&
-		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_UDP_V &&
-		           enc28j60_buffer[UDP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[UDP_DST_PORT_L_P] == 0x00) {
-			datalen = (uint16_t) (enc28j60_buffer[UDP_LEN_H_P] << 8) + enc28j60_buffer[UDP_LEN_L_P];
-			datalen = (datalen>(ENC28J60_BUFFERSIZE)?(ENC28J60_BUFFERSIZE):datalen);
-			datalen -= UDP_HEADER_LEN;
-			data = enc28j60_buffer + UDP_DATA_P;
-			cmdlen = data[2] | data[1] << 8;
+		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_TCP_V &&
+		           enc28j60_buffer[TCP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[TCP_DST_PORT_L_P] == 0x00) {
+			/* start stream, synack */
+			if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
+				make_tcp_synack(mymac, myip);
+			/* stop stream after fin */
+			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_FIN_V) {
+				make_tcp_ack_from_any(mymac, myip);
+			/* handle packets after ack */
+			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_ACK_V) {
+// BEGIN OF MAGIC STUFF
+				datalen = get_tcp_data_len();
+				data = enc28j60_buffer + TCP_SRC_PORT_H_P + get_tcp_header_len();
+				cmdlen = data[2] | data[1] << 8;
+				plen = 0;
 			if (datalen > 2 && cmdlen == (datalen - 3)) {
 				switch (modi = data[0]) {
 				/* allset */
@@ -177,10 +183,9 @@ ISR(INT0_vect)
 					ack('a');
 					break;
 				/* information */
-				sprintf(leds_string, "%d", ws2812_LEDS);
 				case 'i':
 					modi = oldModi;
-					send_reply('i', strcat(strcat(strcat(strcat("{\"name\":\"frickel\",\"leds\":", leds_string), ",\"max_protolen\":"), max_protolen_string), "}"));
+					plen = send_reply_P('i', PSTR("{\"name\":\"frickel\",\"leds\":"MACRO_TO_STRING(ws2812_LEDS)",\"max_protolen\":"MACRO_TO_STRING(ENC28J60_MAX_DATALEN_M)",\"note\":\"Send all the data in one fucking packet!\"}"));
 					break;
 				case 'n':
 					if (!checklen(1)) {
@@ -248,8 +253,14 @@ ISR(INT0_vect)
 			} else {
 				err("protocol error");
 			}
+				/* ack the packet */
+				make_tcp_ack_from_any(mymac, myip);
+				/* send the data and end the tcp stream with fin */
+				make_tcp_ack_with_data(plen);
+// END OF MAGIC STUFF
+			}
 		} else {
-			/* ignore packet */
+			/* unknow packet type, ignore */
 		}
 
 		enc28j60_freePacketSpace();

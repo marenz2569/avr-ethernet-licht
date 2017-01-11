@@ -88,7 +88,6 @@ void makeUdpReply(uint16_t datalen, const uint8_t *mac, const uint8_t *ip, const
 void make_tcp_synack(const uint8_t *mac, const uint8_t *ip);
 uint16_t get_tcp_header_len(void);
 uint16_t get_tcp_data_len(void);
-void make_tcp_ack_from_any(const uint8_t *mac, const uint8_t *ip);
-void make_tcp_ack_with_data(uint16_t dlen);
+void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen);
 
 #endif

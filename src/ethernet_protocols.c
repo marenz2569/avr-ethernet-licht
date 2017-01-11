@@ -200,13 +200,13 @@ uint16_t get_tcp_data_len(void)
 	return (uint16_t) i;
 }
 
-void make_tcp_ack_from_any(const uint8_t *mac, const uint8_t *ip)
+void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen)
 {
 	uint16_t tcp_datalen;
 
 	make_return_packet(mac, ip);
 
-	FILL16(IP_TOTLEN_H_P, IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN);
+	FILL16(IP_TOTLEN_H_P, IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN + dlen);
 
 	make_ip_checksum();
 
@@ -217,24 +217,10 @@ void make_tcp_ack_from_any(const uint8_t *mac, const uint8_t *ip)
         // if there is no data then we must still acknoledge one packet
         make_tcphead(enc28j60_buffer,tcp_datalen,0,1); // no options
 
-	make_tcp_checksum_and_send(0);
-}
-
-/*
- * we do not need to assemble the parts IP and TCP header,
- * as we send the ack with data right after an normal ack,
- * from which we can keep parts.
- *
- * as we do not keep tcp state information,
- * the connection will be closed with a fin.
- */
-void make_tcp_ack_with_data(uint16_t dlen)
-{
-	FILL16(IP_TOTLEN_H_P, IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN + dlen);
-
-	make_ip_checksum();
-
-	enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V|TCP_FLAGS_PUSH_V|TCP_FLAGS_FIN_V;
+	enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V;
+	if (dlen > 0) {
+		enc28j60_buffer[TCP_FLAGS_P] |= TCP_FLAGS_PUSH_V | TCP_FLAGS_FIN_V;
+	}
 
 	make_tcp_checksum_and_send(dlen);
 }

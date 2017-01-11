@@ -156,14 +156,15 @@ ISR(INT0_vect)
 				make_tcp_synack(mymac, myip);
 			/* stop stream after fin */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_FIN_V) {
-				make_tcp_ack_from_any(mymac, myip);
+				make_tcp_ack(mymac, myip, 0);
 			/* handle packets after ack */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_ACK_V) {
 // BEGIN OF MAGIC STUFF
 				datalen = get_tcp_data_len();
+				plen = 0;
+				if (datalen > 0) {
 				data = enc28j60_buffer + TCP_SRC_PORT_H_P + get_tcp_header_len();
 				cmdlen = data[2] | data[1] << 8;
-				plen = 0;
 			if (datalen > 2 && cmdlen == (datalen - 3)) {
 				switch (modi = data[0]) {
 				/* allset */
@@ -253,10 +254,8 @@ ISR(INT0_vect)
 			} else {
 				err("protocol error");
 			}
-				/* ack the packet */
-				make_tcp_ack_from_any(mymac, myip);
-				/* send the data and end the tcp stream with fin */
-				make_tcp_ack_with_data(plen);
+				}
+				make_tcp_ack(mymac, myip, plen);
 // END OF MAGIC STUFF
 			}
 		} else {

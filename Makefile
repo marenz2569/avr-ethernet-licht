@@ -1,6 +1,6 @@
 DEVICE     = atmega328p
 CLOCK      = 16000000
-OBJECTS    = src/main.o src/enc28j60.o src/light_ws2812.o src/ws2812.o src/spi.o src/ethernet_protocols.o src/cos_approx.o
+OBJECTS    = src/main.o src/enc28j60.o src/light_ws2812.o src/ws2812.o src/spi.o src/ethernet_protocols.o src/cos_approx.o src/tick.o
 LIBS       = 
 LIBDIR     = 
 LIBINCLUDE = 

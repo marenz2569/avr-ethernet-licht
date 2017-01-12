@@ -13,6 +13,7 @@
 #include "spi.h"
 #include "enc28j60_defs.h"
 #include "ethernet_protocols.h"
+#include "tick.h"
 
 const uint8_t myip[]      = {172,23,92,15},
               mymac[]     = {0x70,0x69,0x69,0x2D,0x30,0x31},
@@ -20,10 +21,11 @@ const uint8_t myip[]      = {172,23,92,15},
 
 volatile uint8_t change       = 1,
                  modi         = 'n',
-                 oldModi      = 'n',
                  animation    = 1,
-                 oldAnimation = 1,
                  dir          = 1;
+
+/* in ms */
+#define LOCK_TIMEOUT 50
 
 #define NAME(name) \
         #name
@@ -31,12 +33,16 @@ volatile uint8_t change       = 1,
 #define MACRO_TO_STRING(x) \
         NAME(x)
 
-#define err(e) \
-        plen = send_reply_P('e', PSTR(e)) \
+/* send error message and close tcp session */
+#define ERR(e) \
+        plen = send_reply_P('e', PSTR(e)); \
 	flags = TCP_FLAGS_FIN_V
 
-#define ack(m) \
-        plen = send_reply_P(m, PSTR(""))
+/* send ok message */
+#define OK \
+        plen = send_reply_P(modi, PSTR("")); \
+	ws2812_locked = 1; \
+	change = 1
 
 #define checklen(x) \
         (cmdlen >= x)
@@ -76,10 +82,6 @@ int main(void)
 
 	rgb color;
 
-#define break_on_change while (!change) \
-                                _delay_us(0.0000000000000625); \
-                        break
-
 	uint16_t i,
 	         x0e_step_count,
 	         x0e_steps_for_360;
@@ -92,18 +94,42 @@ int main(void)
 	x0e_led_shift = 360.0  / (float) ws2812_LEDS;
 
 	for (;;) {
-		switch (oldModi = modi) {
+		switch (modi) {
+		/*
+		 * ALLSET
+		 * C: "a" + LEN + GRB (3 Bytes)
+		 * S: "a" + LEN (0x0000) || "e" + LEN + ERROR
+		 */
 		case 'a':
+		/*
+		 * RANGESET
+		 * C: "r" + LEN + offset (2 Byte) + GRB (3 Byte) ...
+		 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
+		 */
 		case 'r':
+		/*
+		 * SET
+		 * C: "s" + LEN + [ledid (2 Byte) + GRB (3 Byte)] ...
+		 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
+		 */
 		case 's':
 			if (change) {
 				ws2812_locked = 0;
 				ws2812_sync();
 				change = 0;
 			}
-			break_on_change;
+			while (!change) {
+                                _delay_us(0.0000000000000625);
+			}
+                        break;
 		case 'n':
 			switch (animation) {
+			/*
+			 * FARBVERLAUF
+			 * C: "n" + LEN (0x0002) + 0x0100
+			 * oder
+			 * C: "n" + LEN (0x0002) + 0x01FF
+			 */
 			case 1:
 				if (change) {
 					x0e_step_count = 0;
@@ -138,7 +164,7 @@ ISR(INT1_vect)
 	uint16_t i, j;
 	rgb c;
 
-	for (j=3 * 1000; j>0; j--) {
+	for (j=6; j>0; j--) {
 		LEDS_LOOP_BEGIN
 			if (i%3 == 0) {
 				c.g = 0xff;
@@ -147,22 +173,26 @@ ISR(INT1_vect)
 			}
 			ws2812_set_rgb_at(i, c);
 		LEDS_LOOP_END;
-		_delay_ms(10);
+		_delay_ms(50);
 	}
 }
 #endif
 
+struct {
+	uint64_t time;
+	uint32_t ip;
+} lock = { .time = 0, .ip = 0 };
+
 /* enc28j60 interrupt */
 ISR(INT0_vect)
 {
-	int16_t j;
-	uint16_t plen, i, datalen, cmdlen, offset, start, dat_p;
+	uint16_t i, plen, data_offset, datalen, cmdlen, offset, start;
 	uint8_t flags;
 	uint8_t *data;
 	struct {
 		uint8_t id[2];
 		rgb color;
-	} s_led;
+	} pixel;
 
 	enc28j60_writeOp(ENC28J60_BIT_FIELD_CLR, EIE, EIE_INTIE);
 
@@ -178,26 +208,44 @@ ISR(INT0_vect)
 		} else if (eth_type_is_ip_and_my_ip(plen, myip, broadcast) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_TCP_V &&
 		           enc28j60_buffer[TCP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[TCP_DST_PORT_L_P] == 0x00) {
-			/* start stream, synack */
-			if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
+			/* timeout, acquire new lock */
+			if (lock.time + LOCK_TIMEOUT <= systick) {
+				memcpy(&lock.ip, enc28j60_buffer + IP_SRC_P, 4);
+				memcpy(&lock.time, (void *) &systick, sizeof(systick));
+			/* no timeout and wrong ip, reset connection */
+			} else if (memcmp(&lock.ip, enc28j60_buffer + IP_SRC_P, 4) != 0) {
+				make_tcp_ack(mymac, myip, 0, TCP_FLAGS_RST_V);
+			/*
+			 * no timeout and right ip (all of the following else if)
+			 * start stream, synack
+			 */
+			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
 				make_tcp_synack(mymac, myip);
 			/* stop stream after fin */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_FIN_V) {
 				make_tcp_ack(mymac, myip, 0, TCP_FLAGS_FIN_V);
-			/* handle packets after ack */
-			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_ACK_V) {
-// BEGIN OF MAGIC STUFF
-				datalen = get_tcp_data_len();
+			/* reply with ack */
+			/* maybe I should resend the data if no ack is received after data being sent */
+			//} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_ACK_V) {
+			//	make_tcp_ack(mymac, myip, 0, 0);
+			/* handle incoming data */
+			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_PUSH_V) {
 				plen = 0;
-				if (datalen > 0) {
-				data = enc28j60_buffer + TCP_SRC_PORT_H_P + get_tcp_header_len();
+				flags = 0;
+				data_offset = TCP_SRC_PORT_H_P + get_tcp_header_len();
+				datalen = get_tcp_data_len();
+				data = enc28j60_buffer + data_offset;
 				cmdlen = data[2] | data[1] << 8;
 				if (datalen > 2 && cmdlen == (datalen - 3)) {
 					switch (modi = data[0]) {
-					/* allset */
+					/*
+					 * ALLSET
+					 * C: "a" + LEN + GRB (3 Bytes)
+					 * S: "a" + LEN (0x0000) || "e" + LEN + ERROR
+					 */
 					case 'a':
 						if (!checklen(3)) {
-							err("need at least 3 arguments");
+							ERR("protocol error");
 							break;
 						}
 						rgb color;
@@ -206,84 +254,89 @@ ISR(INT0_vect)
 						LEDS_LOOP_BEGIN
 							ws2812_set_rgb_at(i, color);
 						LEDS_LOOP_END;
-						ws2812_locked = 1;
-						change = 1;
-						ack('a');
+						OK;
 						break;
-					/* information */
+					/*
+					 * INFORMATION
+					 * C: "i" + 0x00
+					 * S: "i" + LEN + JSON-Beschreibung || "e" + LEN + ERROR
+					 */
 					case 'i':
-						modi = oldModi;
 						plen = send_reply_P('i', PSTR("{\"name\":\"frickel\",\"leds\":"MACRO_TO_STRING(ws2812_LEDS)",\"max_protolen\":"MACRO_TO_STRING(ENC28J60_MAX_DATALEN_M)",\"note\":\"Send all the data in one fucking packet!\"}"));
 						break;
+					/*
+					 * FARBVERLAUF
+					 * C: "n" + LEN (0x0002) + 0x0100
+					 * oder
+					 * C: "n" + LEN (0x0002) + 0x01FF
+					 */
 					case 'n':
-						if (!checklen(1)) {
-							err("protocol error");
+						if (cmdlen < 1) {
+							ERR("protocol error");
 							break;
 						}
 						switch (animation = data[3]) {
 						case 0x01:
-							if (!checklen(2))
+							if (cmdlen < 2)
+								ERR("protocol error");
 								break;
 							if (data[4]) {
 								dir = 1;
 							} else {
 								dir = 0;
 							}
-							ws2812_locked = 1;
-							change = 1;
-							ack('n');
+							OK;
 							break;
 						default:
-							animation = oldAnimation;
-							err("mode not implemented");
+							ERR("protocol error");
 							break;
 						}
 						break;
-					/* rangeset */
+					/*
+					 * RANGESET
+					 * C: "r" + LEN + offset (2 Byte) + GRB (3 Byte) ...
+					 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
+					 */
 					case 'r':
-						if (!checklen(5)) {
-							err("need at least 5 arguments");
-							break;
-						}
 						offset = (uint16_t) (data[3] >> 8) | data[4];
-						if (!(offset < ws2812_LEDS)) {
-							err("out of range");
-						}
-						cmdlen -= 2;
-						cmdlen -= cmdlen % 3 + 1;
-						start = enc28j60_curPacketPointer + 6 + UDP_DATA_P + 5;
-						enc28j60_dma(start, start + cmdlen, offset * 3 + ENC28J60_HEAP_START);
-						ws2812_locked = 1;
-						change = 1;
-						ack('r');
-						break;
-					/* set */
-					case 's':
-						if (!checklen(5)) {
-							err("need at least 5 arguments");
+						if (cmdlen < 5 ||
+						    (cmdlen - 2) % 3 != 0 ||
+						    offset >= ws2812_LEDS) {
+							ERR("protocol error");
 							break;
 						}
-						cmdlen -= cmdlen % 5;
-						cmdlen = cmdlen / 5;
-						enc28j60_writeReg16(ERDPTL, enc28j60_curPacketPointer + 6 + UDP_DATA_P + 3);
-						while (cmdlen--) {
-							enc28j60_readBuf(5, (uint8_t *) &s_led);
-							ws2812_set_rgb_at(s_led.id[0] << 8 | s_led.id[1], s_led.color);
+						cmdlen = (cmdlen - 2) % 3 - 1;
+						start = enc28j60_curPacketPointer + 6 + data_offset + 5;
+						enc28j60_dma(start, start + cmdlen, offset * 3 + ENC28J60_HEAP_START);
+						OK;
+						break;
+					/*
+					 * SET
+					 * C: "s" + LEN + [ledid (2 Byte) + GRB (3 Byte)] ...
+					 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
+					 */
+					case 's':
+						if (cmdlen < 5 && cmdlen % 5 != 0) {
+							ERR("protocol error");
+							break;
 						}
-						ws2812_locked = 1;
-						change = 1;
-						ack('s');
+						cmdlen /= 5;
+						enc28j60_writeReg16(ERDPTL, enc28j60_curPacketPointer + 6 + data_offset + 3);
+						while (cmdlen--) {
+							enc28j60_readBuf(5, (uint8_t *) &pixel);
+							ws2812_set_rgb_at(pixel.id[0] << 8 | pixel.id[1], pixel.color);
+						}
+						OK;
 						break;
 					default:
-						modi = oldModi;
-						err("mode not implemented");
+						ERR("protocol error");
 					}
 				} else {
-					err("protocol error");
-				}
+					ERR("protocol error");
 				}
 				make_tcp_ack(mymac, myip, plen, flags);
-// END OF MAGIC STUFF
+			} else {
+				/* some TCP flag I did not account for */
 			}
 		} else {
 			/* unknown packet type, ignore */

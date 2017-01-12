@@ -179,7 +179,7 @@ void make_tcp_synack(const uint8_t *mac, const uint8_t *ip)
 
 	make_ip_checksum();
 
-	enc28j60_buffer[TCP_FLAGS_P] = TCP_FLAGS_SYNACK_V;
+	enc28j60_buffer[TCP_FLAGS_P] = TCP_FLAGS_SYN_V | TCP_FLAGS_ACK_V;
 	make_tcphead(enc28j60_buffer, 1, 1, 0);
 
 	make_tcp_checksum_and_send(4);
@@ -200,7 +200,7 @@ uint16_t get_tcp_data_len(void)
 	return (uint16_t) i;
 }
 
-void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen)
+void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen, const uint8_t flag)
 {
 	uint16_t tcp_datalen;
 
@@ -217,7 +217,7 @@ void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen)
         // if there is no data then we must still acknoledge one packet
         make_tcphead(enc28j60_buffer,tcp_datalen,0,1); // no options
 
-	enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V;
+	enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V | flag;
 	if (dlen > 0) {
 		enc28j60_buffer[TCP_FLAGS_P] |= TCP_FLAGS_PUSH_V | TCP_FLAGS_FIN_V;
 	}

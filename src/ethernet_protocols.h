@@ -1,6 +1,8 @@
 #ifndef ETHERNET_PROTOCOLS_H__
 #define ETHERNET_PROTOCOLS_H__
 
+#include <inttypes.h>
+
 /* ETH */
 #define ETH_HEADER_LEN    14
 #define ETHTYPE_ARP_H_V 0x08
@@ -68,9 +70,7 @@
 #define TCP_FLAGS_SYN_V 2
 #define TCP_FLAGS_FIN_V 1
 #define TCP_FLAGS_PUSH_V 8
-#define TCP_FLAGS_SYNACK_V 0x12
 #define TCP_FLAGS_ACK_V 0x10
-#define TCP_FLAGS_PSHACK_V 0x18
 //  plain len without the options:
 #define TCP_HEADER_LEN_PLAIN 20
 #define TCP_HEADER_LEN_P 0x2e
@@ -88,6 +88,6 @@ void makeUdpReply(uint16_t datalen, const uint8_t *mac, const uint8_t *ip, const
 void make_tcp_synack(const uint8_t *mac, const uint8_t *ip);
 uint16_t get_tcp_header_len(void);
 uint16_t get_tcp_data_len(void);
-void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen);
+void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen, const uint8_t flag);
 
 #endif

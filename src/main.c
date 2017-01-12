@@ -178,11 +178,6 @@ ISR(INT1_vect)
 }
 #endif
 
-struct {
-	uint64_t time;
-	uint32_t ip;
-} lock = { .time = 0, .ip = 0 };
-
 /* enc28j60 interrupt */
 ISR(INT0_vect)
 {
@@ -193,6 +188,11 @@ ISR(INT0_vect)
 		uint8_t id[2];
 		rgb color;
 	} pixel;
+	static struct {
+		uint64_t time;
+		uint32_t ip;
+	} lock = { .time = 0, .ip = 0 };
+
 
 	enc28j60_writeOp(ENC28J60_BIT_FIELD_CLR, EIE, EIE_INTIE);
 
@@ -208,19 +208,18 @@ ISR(INT0_vect)
 		} else if (eth_type_is_ip_and_my_ip(plen, myip, broadcast) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_TCP_V &&
 		           enc28j60_buffer[TCP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[TCP_DST_PORT_L_P] == 0x00) {
-			/* timeout, acquire new lock */
-			if (lock.time + LOCK_TIMEOUT <= systick) {
+			/* timeout and syn, acquire new lock, reply with synack, start new TCP session */
+			if (lock.time + LOCK_TIMEOUT <= systick &&
+			    enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
 				memcpy(&lock.ip, enc28j60_buffer + IP_SRC_P, 4);
 				memcpy(&lock.time, (void *) &systick, sizeof(systick));
+				make_tcp_synack(mymac, myip);
 			/* no timeout and wrong ip, reset connection */
 			} else if (memcmp(&lock.ip, enc28j60_buffer + IP_SRC_P, 4) != 0) {
 				make_tcp_ack(mymac, myip, 0, TCP_FLAGS_RST_V);
 			/*
-			 * no timeout and right ip (all of the following else if)
-			 * start stream, synack
+			 * no timeout and right ip
 			 */
-			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
-				make_tcp_synack(mymac, myip);
 			/* stop stream after fin */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_FIN_V) {
 				make_tcp_ack(mymac, myip, 0, TCP_FLAGS_FIN_V);

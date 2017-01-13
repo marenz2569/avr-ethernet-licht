@@ -248,7 +248,7 @@ ISR(INT0_vect)
 					 * S: "a" + LEN (0x0000) || "e" + LEN + ERROR
 					 */
 					case 'a':
-						if (!checklen(3)) {
+						if (cmdlen < 3) {
 							ERR("protocol error");
 							break;
 						}

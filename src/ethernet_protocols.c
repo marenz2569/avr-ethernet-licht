@@ -219,7 +219,7 @@ void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen, co
 
 	enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V | flag;
 	if (dlen > 0) {
-		enc28j60_buffer[TCP_FLAGS_P] |= TCP_FLAGS_PUSH_V | TCP_FLAGS_FIN_V;
+		enc28j60_buffer[TCP_FLAGS_P] |= TCP_FLAGS_PUSH_V;
 	}
 
 	make_tcp_checksum_and_send(dlen);

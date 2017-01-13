@@ -36,7 +36,8 @@ volatile uint8_t change       = 1,
 /* send error message and close tcp session */
 #define ERR(e) \
         plen = send_reply_P('e', PSTR(e)); \
-	flags = TCP_FLAGS_FIN_V
+	flags = TCP_FLAGS_RST_V; \
+	lock.time = (systick <= LOCK_TIMEOUT)?0:(systick - LOCK_TIMEOUT)
 
 /* send ok message */
 #define OK \
@@ -208,11 +209,11 @@ ISR(INT0_vect)
 		} else if (eth_type_is_ip_and_my_ip(plen, myip, broadcast) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_TCP_V &&
 		           enc28j60_buffer[TCP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[TCP_DST_PORT_L_P] == 0x00) {
-			/* timeout and syn, acquire new lock, reply with synack, start new TCP session */
+			/* timeout and syn, acquire new lock, reply with ack/syn, start new TCP session */
 			if (lock.time + LOCK_TIMEOUT <= systick &&
 			    enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
 				memcpy(&lock.ip, enc28j60_buffer + IP_SRC_P, 4);
-				memcpy(&lock.time, (void *) &systick, sizeof(systick));
+				lock.time = systick;
 				make_tcp_synack(mymac, myip);
 			/* no timeout and wrong ip, reset connection */
 			} else if (memcmp(&lock.ip, enc28j60_buffer + IP_SRC_P, 4) != 0) {
@@ -220,9 +221,13 @@ ISR(INT0_vect)
 			/*
 			 * no timeout and right ip
 			 */
-			/* stop stream after fin */
+			/* stop stream after fin, reset lock */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_FIN_V) {
 				make_tcp_ack(mymac, myip, 0, TCP_FLAGS_FIN_V);
+				lock.time = (systick <= LOCK_TIMEOUT)?0:(systick - LOCK_TIMEOUT);
+			/* rst or ack/rst, closed, reset lock */
+			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_RST_V) {
+				lock.time = (systick <= LOCK_TIMEOUT)?0:(systick - LOCK_TIMEOUT);
 			/* reply with ack */
 			/* maybe I should resend the data if no ack is received after data being sent */
 			//} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_ACK_V) {

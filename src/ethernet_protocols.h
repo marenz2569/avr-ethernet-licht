@@ -69,7 +69,7 @@
 #define TCP_FLAGS_P 0x2f
 #define TCP_FLAGS_FIN_V 1
 #define TCP_FLAGS_SYN_V 2
-#define TCP_FLAGS_RST_V 3
+#define TCP_FLAGS_RST_V 4
 #define TCP_FLAGS_PUSH_V 8
 #define TCP_FLAGS_ACK_V 0x10
 //  plain len without the options:

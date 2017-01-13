@@ -228,10 +228,6 @@ ISR(INT0_vect)
 			/* rst or ack/rst, closed, reset lock */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_RST_V) {
 				lock.time = (systick <= LOCK_TIMEOUT)?0:(systick - LOCK_TIMEOUT);
-			/* reply with ack */
-			/* maybe I should resend the data if no ack is received after data being sent */
-			//} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_ACK_V) {
-			//	make_tcp_ack(mymac, myip, 0, 0);
 			/* handle incoming data */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_PUSH_V) {
 				plen = 0;
@@ -339,6 +335,10 @@ ISR(INT0_vect)
 					ERR("protocol error");
 				}
 				make_tcp_ack(mymac, myip, plen, flags);
+			/* reply with ack */
+			/* maybe I should resend the data if no ack is received after data being sent */
+			//} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_ACK_V) {
+			//	make_tcp_ack(mymac, myip, 0, 0);
 			} else {
 				/* some TCP flag I did not account for */
 			}

@@ -188,7 +188,6 @@ ISR(INT0_vect)
 		uint32_t ip;
 	} lock = { .time = 0, .ip = 0 };
 
-
 	enc28j60_writeOp(ENC28J60_BIT_FIELD_CLR, EIE, EIE_INTIE);
 
 	/* parse individual packets */
@@ -203,12 +202,17 @@ ISR(INT0_vect)
 		} else if (eth_type_is_ip_and_my_ip(plen, myip, broadcast) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_TCP_V &&
 		           enc28j60_buffer[TCP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[TCP_DST_PORT_L_P] == 0x00) {
-			/* timeout and syn, acquire new lock, reply with ack/syn, start new TCP session */
-			if (lock.time + LOCK_TIMEOUT <= systick &&
-			    enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
-				memcpy(&lock.ip, enc28j60_buffer + IP_SRC_P, 4);
-				lock.time = systick;
-				make_tcp_synack(mymac, myip);
+			/* timeout */
+			if (lock.time + LOCK_TIMEOUT <= systick) {
+				/* timeout, syn, acquire new lock, reply with ack/syn, start new TCP session */
+				if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
+					memcpy(&lock.ip, enc28j60_buffer + IP_SRC_P, 4);
+					lock.time = systick;
+					make_tcp_synack(mymac, myip);
+				/* timeout, no syn, RST */
+				} else {
+					make_tcp_ack(mymac, myip, 0, TCP_FLAGS_RST_V);
+				}
 			/* no timeout and wrong ip, reset connection */
 			} else if (memcmp(&lock.ip, enc28j60_buffer + IP_SRC_P, 4) != 0) {
 				make_tcp_ack(mymac, myip, 0, TCP_FLAGS_RST_V);

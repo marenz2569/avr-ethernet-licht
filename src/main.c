@@ -45,6 +45,10 @@ volatile uint8_t change       = 1,
 	ws2812_locked = 1; \
 	change = 1
 
+#define UNLOCK \
+	ws2812_locked = 0; \
+	change = 0
+
 #define checklen(x) \
         (cmdlen >= x)
 
@@ -79,10 +83,11 @@ int main(void)
 
 	PORTB |= _BV(PORTB0);
 
-	ws2812_locked = 0;
+	UNLOCK;
 
-	rgb color;
+	rgb pixel;
 
+	uint8_t j;
 	uint16_t i,
 	         x0e_step_count,
 	         x0e_steps_for_360;
@@ -114,11 +119,8 @@ int main(void)
 		 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
 		 */
 		case 's':
-			if (change) {
-				ws2812_locked = 0;
-				ws2812_sync();
-				change = 0;
-			}
+			UNLOCK;
+			ws2812_sync();
 			while (!change) {
                                 _delay_us(0.0000000000000625);
 			}
@@ -132,52 +134,44 @@ int main(void)
 			 * C: "n" + LEN (0x0002) + 0x01FF
 			 */
 			case 1:
-				if (change) {
-					x0e_step_count = 0;
-					ws2812_locked = 0;
-					change = 0;
-				}
+				UNLOCK;
+				x0e_step_count = 0;
 				while (!change) {
 					LEDS_LOOP_BEGIN
-						if (dir) {
-							color = hsi2rgb(x0e_led_shift * (float) (i + 1) + (float) x0e_step_count * x0e_step_per_cycle, 1.0, 1.0);
-						} else {
-							color = hsi2rgb(x0e_led_shift * (float ) (ws2812_LEDS - i) + (float) x0e_step_count * x0e_step_per_cycle, 1.0, 1.0);
-						}
-						ws2812_set_rgb_at(i, color);
+						pixel = hsi2rgb(x0e_led_shift * (float) (dir?(i + 1):(ws2812_LEDS - i)) + (float) x0e_step_count * x0e_step_per_cycle, 1.0, 1.0);
+						ws2812_set_rgb_at(i, pixel);
 					LEDS_LOOP_END;
 					ws2812_sync();
 					x0e_step_count = ++x0e_step_count % x0e_steps_for_360;
 				}
 				break;
+			case 2:
+				UNLOCK;
+				j = 0;
+				while (!change) {
+					*(&pixel.g+j) = 0xff; 
+					*(&pixel.g+(j%3==0?1:0)) = 0; 
+					*(&pixel.g+(j%3==2?1:2)) = 0; 
+					LEDS_LOOP_BEGIN
+						ws2812_set_rgb_at(i, pixel);
+					LEDS_LOOP_END;
+					ws2812_sync();
+					if (++j==3) {
+						j = 0;
+					}
+					_delay_ms(40);
+				}
+			default:
+				break;
 			}
+			break;
+		default:
 			break;
 		}
 	}
 
 	return 0;
 }
-
-#if 0
-/* doorbell fun */
-ISR(INT1_vect)
-{
-	uint16_t i, j;
-	rgb c;
-
-	for (j=6; j>0; j--) {
-		LEDS_LOOP_BEGIN
-			if (i%3 == 0) {
-				c.g = 0xff;
-			} else {
-				c >>= 8;
-			}
-			ws2812_set_rgb_at(i, c);
-		LEDS_LOOP_END;
-		_delay_ms(50);
-	}
-}
-#endif
 
 /* enc28j60 interrupt */
 ISR(INT0_vect)
@@ -236,7 +230,7 @@ ISR(INT0_vect)
 				datalen = get_tcp_data_len();
 				data = enc28j60_buffer + data_offset;
 				cmdlen = data[2] | data[1] << 8;
-				if (datalen > 2 && cmdlen == (datalen - 3)) {
+				if (datalen > 3 && cmdlen == (datalen - 3)) {
 					switch (modi = data[0]) {
 					/*
 					 * ALLSET
@@ -248,11 +242,10 @@ ISR(INT0_vect)
 							ERR("protocol error");
 							break;
 						}
-						rgb color;
-						memcpy(&color, data + 3, 3);
+						memcpy(&pixel.color, data + 3, 3);
 						ws2812_locked = 0;
 						LEDS_LOOP_BEGIN
-							ws2812_set_rgb_at(i, color);
+							ws2812_set_rgb_at(i, pixel.color);
 						LEDS_LOOP_END;
 						OK;
 						break;
@@ -264,27 +257,35 @@ ISR(INT0_vect)
 					case 'i':
 						plen = send_reply_P('i', PSTR("{\"name\":\"frickel\",\"leds\":"MACRO_TO_STRING(ws2812_LEDS)",\"max_protolen\":"MACRO_TO_STRING(ENC28J60_MAX_DATALEN_M)",\"note\":\"Send all the data in one fucking packet!\"}"));
 						break;
-					/*
-					 * FARBVERLAUF
-					 * C: "n" + LEN (0x0002) + 0x0100
-					 * oder
-					 * C: "n" + LEN (0x0002) + 0x01FF
-					 */
 					case 'n':
 						if (cmdlen < 1) {
 							ERR("protocol error");
 							break;
 						}
 						switch (animation = data[3]) {
-						case 0x01:
-							if (cmdlen < 2)
+						/*
+						 * FARBVERLAUF
+						 * C: "n" + LEN (0x0002) + 0x0100
+						 * oder
+						 * C: "n" + LEN (0x0002) + 0x01FF
+						 */
+						case 1:
+							if (cmdlen < 2) {
 								ERR("protocol error");
 								break;
+							}
 							if (data[4]) {
 								dir = 1;
 							} else {
 								dir = 0;
 							}
+							OK;
+							break;
+						/*
+						 * KLINGEL
+						 * C: "n" + LEN (0x0000) + 0x02
+						 */
+						case 2:
 							OK;
 							break;
 						default:
@@ -301,11 +302,11 @@ ISR(INT0_vect)
 						offset = (uint16_t) (data[3] >> 8) | data[4];
 						if (cmdlen < 5 ||
 						    (cmdlen - 2) % 3 != 0 ||
-						    offset >= ws2812_LEDS) {
+						    (cmdlen - 2) % 3 + offset > ws2812_LEDS) {
 							ERR("protocol error");
 							break;
 						}
-						cmdlen = (cmdlen - 2) % 3 - 1;
+						cmdlen = (cmdlen - 2) / 3 - 1;
 						start = enc28j60_curPacketPointer + 6 + data_offset + 5;
 						enc28j60_dma(start, start + cmdlen, offset * 3 + ENC28J60_HEAP_START);
 						OK;

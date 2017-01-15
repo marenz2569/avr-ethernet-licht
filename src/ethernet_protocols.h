@@ -64,7 +64,7 @@
 #define TCP_DST_PORT_L_P 0x25
 // the tcp seq number is 4 bytes 0x26-0x29
 #define TCP_SEQ_H_P 0x26
-#define TCP_SEQACK_H_P 0x2a
+#define TCP_ACK_H_P 0x2a
 // flags: SYN=2
 #define TCP_FLAGS_P 0x2f
 #define TCP_FLAGS_FIN_V 1

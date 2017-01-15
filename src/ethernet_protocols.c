@@ -101,43 +101,27 @@ void makeUdpReply(uint16_t datalen, const uint8_t *mac, const uint8_t *ip, const
 	enc28j60_packetSend(ETH_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN + datalen);
 }
 
-static uint8_t seqnum = 0x0a;
-
-void make_tcphead(uint8_t *buf,uint16_t rel_ack_num,uint8_t mss,uint8_t cp_seq)
+void make_tcphead(uint8_t *buf,uint16_t len,uint8_t mss,uint8_t cp_seq)
 {
-        uint8_t i=0;
-        uint8_t tseq;
-	uint16_t tmp_port;
-	memcpy(&tmp_port, buf + TCP_DST_PORT_H_P, 2);
+	uint64_t tmp;
+
+	memcpy(&tmp, buf + TCP_DST_PORT_H_P, 2);
 	memcpy(buf + TCP_DST_PORT_H_P, buf + TCP_SRC_PORT_H_P, 2);
-	memcpy(buf + TCP_SRC_PORT_H_P, &tmp_port, 2);
-        i=4;
-        // sequence numbers:
-        // add the rel ack num to SEQACK
-        while(i>0){
-                rel_ack_num += buf[TCP_SEQ_H_P+i-1];
-                tseq=buf[TCP_SEQACK_H_P+i-1];
-                buf[TCP_SEQACK_H_P+i-1]=0xff&rel_ack_num;
-                if (cp_seq){
-                        // copy the acknum sent to us into the sequence number
-                        buf[TCP_SEQ_H_P+i-1]=tseq;
-                }else{
-                        buf[TCP_SEQ_H_P+i-1]= 0; // some preset vallue
-                }
-                rel_ack_num=rel_ack_num>>8;
-                i--;
-        }
+	memcpy(buf + TCP_SRC_PORT_H_P, &tmp, 2);
+
+	memcpy(&tmp, buf + TCP_SEQ_H_P, 4);
+	memcpy(buf + TCP_SEQ_H_P, buf + TCP_ACK_H_P, 4);
+	tmp = (uint64_t) ((((uint32_t) tmp & 0x000000ff) << 24) | (((uint32_t) tmp & 0x0000ff00) << 8) | (((uint32_t) tmp & 0x00ff0000) >> 8) | (((uint32_t) tmp & 0xff000000) >> 24));
+	tmp += len;
+	tmp = (uint64_t) ((((uint32_t) tmp & 0x000000ff) << 24) | (((uint32_t) tmp & 0x0000ff00) << 8) | (((uint32_t) tmp & 0x00ff0000) >> 8) | (((uint32_t) tmp & 0xff000000) >> 24));
+	memcpy(buf + TCP_ACK_H_P, &tmp, 4);
+
         if (cp_seq==0){
                 // put inital seq number
                 buf[TCP_SEQ_H_P+0]= 0;
                 buf[TCP_SEQ_H_P+1]= 0;
-                // we step only the second byte, this allows us to send packts 
-                // with 255 bytes or 512 (if we step the initial seqnum by 2)
-                buf[TCP_SEQ_H_P+2]= seqnum; 
+                buf[TCP_SEQ_H_P+2]= 0x0a; 
                 buf[TCP_SEQ_H_P+3]= 0;
-                // step the inititial seq num by something we will not use
-                // during this tcp session:
-                seqnum+=2;
         }
         // zero the checksum
         buf[TCP_CHECKSUM_H_P]=0;
@@ -202,7 +186,9 @@ uint16_t get_tcp_data_len(void)
 
 void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen, const uint8_t flag)
 {
-	uint16_t tcp_datalen;
+	uint16_t old_datalen;
+
+	old_datalen = get_tcp_data_len();
 
 	make_return_packet(mac, ip);
 
@@ -210,12 +196,8 @@ void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen, co
 
 	make_ip_checksum();
 
-        // fill the header:
-	tcp_datalen = get_tcp_data_len();
-	tcp_datalen = tcp_datalen==0?1:tcp_datalen;
         enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V;
-        // if there is no data then we must still acknoledge one packet
-        make_tcphead(enc28j60_buffer,tcp_datalen,0,1); // no options
+        make_tcphead(enc28j60_buffer,(old_datalen==0)?1:old_datalen,0,1);
 
 	enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V | flag;
 	if (dlen > 0) {

@@ -3,19 +3,23 @@
 
 #include "enc28j60.h"
 #include "ethernet_protocols.h"
+#include "ethernet_protocols_config.h"
 
 #define FILL16(to, data) \
         enc28j60_buffer[to] = (data) >> 8; \
         enc28j60_buffer[to+1] = data
 
-uint8_t eth_type_is_arp_and_my_ip(const uint16_t len, const uint8_t *ip)
+const uint8_t __flash ip[]        = IP,
+                      broadcast[] = BROADCAST;
+
+uint8_t eth_type_is_arp_and_my_ip(const uint16_t len)
 {
 	return len >= 42 && enc28j60_buffer[ETH_TYPE_H_P] == ETHTYPE_ARP_H_V &&
 	       enc28j60_buffer[ETH_TYPE_L_P] == ETHTYPE_ARP_L_V &&
 	       memcmp(enc28j60_buffer + ETH_ARP_DST_IP_P, ip, 4) == 0;
 }
 
-void make_arp_answer_from_request(const uint8_t *mac, const uint8_t *ip)
+void make_arp_answer_from_request(void)
 {
 	memcpy(enc28j60_buffer + ETH_DST_MAC, enc28j60_buffer + ETH_SRC_MAC, 6);
 	memcpy(enc28j60_buffer + ETH_SRC_MAC, mac, 6);
@@ -28,7 +32,7 @@ void make_arp_answer_from_request(const uint8_t *mac, const uint8_t *ip)
 	enc28j60_packetSend(42);
 }
 
-uint8_t eth_type_is_ip_and_my_ip(const uint16_t len, const uint8_t *ip, const uint8_t *broadcast)
+uint8_t eth_type_is_ip_and_my_ip(const uint16_t len)
 {
 	const uint8_t allOnes[] = {0xff, 0xff, 0xff, 0xff};
 
@@ -72,7 +76,7 @@ static void make_ip_checksum(void)
 	fill_checksum(IP_CHECKSUM_P, IP_P, IP_HEADER_LEN, 0);
 }
 
-static void make_return_packet(const uint8_t *mac, const uint8_t *ip)
+static void make_return_packet(void)
 {
 	memcpy(enc28j60_buffer + ETH_DST_MAC, enc28j60_buffer + ETH_SRC_MAC, 6);
         memcpy(enc28j60_buffer + ETH_SRC_MAC, mac, 6);
@@ -80,12 +84,12 @@ static void make_return_packet(const uint8_t *mac, const uint8_t *ip)
         memcpy(enc28j60_buffer + IP_SRC_P, ip, 4);
 }
 
-void makeUdpReply(uint16_t datalen, const uint8_t *mac, const uint8_t *ip, const uint16_t port)
+void makeUdpReply(uint16_t datalen, const uint16_t port)
 {
 	datalen = datalen>ENC28J60_BUFFERSIZE?ENC28J60_BUFFERSIZE:datalen;
 	enc28j60_buffer[IP_TOTLEN_H_P] = (IP_HEADER_LEN + UDP_HEADER_LEN + datalen) >> 8;
 	enc28j60_buffer[IP_TOTLEN_L_P] = IP_HEADER_LEN + UDP_HEADER_LEN + datalen;
-	make_return_packet(mac, ip);
+	make_return_packet();
 
 	make_ip_checksum();
 
@@ -155,9 +159,9 @@ static void make_tcp_checksum_and_send(uint16_t len)
 	enc28j60_packetSend(ETH_HEADER_LEN + IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN + len);
 }
 
-void make_tcp_synack(const uint8_t *mac, const uint8_t *ip)
+void make_tcp_synack(void)
 {
-	make_return_packet(mac, ip);
+	make_return_packet();
 
 	FILL16(IP_TOTLEN_H_P, IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN + 4);
 
@@ -184,13 +188,13 @@ uint16_t get_tcp_data_len(void)
 	return (uint16_t) i;
 }
 
-void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen, const uint8_t flag)
+void make_tcp_ack(const uint16_t dlen, const uint8_t flag)
 {
 	uint16_t old_datalen;
 
 	old_datalen = get_tcp_data_len();
 
-	make_return_packet(mac, ip);
+	make_return_packet();
 
 	FILL16(IP_TOTLEN_H_P, IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN + dlen);
 

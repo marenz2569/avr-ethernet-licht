@@ -5,6 +5,8 @@
 #define ENC28J60_CS_PORT	PORTB
 #define ENC28J60_CS_PIN		PORTB2
 
+#define MAC {0x70,0x69,0x69,0x2d,0x30,0x31}
+
 enum {
 	ENC28J60_BUFFERSIZE = 200
 };

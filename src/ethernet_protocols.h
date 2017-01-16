@@ -79,16 +79,18 @@
 #define TCP_CHECKSUM_L_P 0x33
 #define TCP_OPTIONS_P 0x36
 
-uint8_t eth_type_is_arp_and_my_ip(const uint16_t len, const uint8_t *ip);
-void make_arp_answer_from_request(const uint8_t *mac, const uint8_t *ip);
+extern const uint8_t mac[];
 
-uint8_t eth_type_is_ip_and_my_ip(const uint16_t len, const uint8_t *ip, const uint8_t *broadcast);
+uint8_t eth_type_is_arp_and_my_ip(const uint16_t len);
+void make_arp_answer_from_request(void);
 
-void makeUdpReply(uint16_t datalen, const uint8_t *mac, const uint8_t *ip, const uint16_t port);
+uint8_t eth_type_is_ip_and_my_ip(const uint16_t len);
 
-void make_tcp_synack(const uint8_t *mac, const uint8_t *ip);
+void makeUdpReply(uint16_t datalen, const uint16_t port);
+
+void make_tcp_synack(void);
 uint16_t get_tcp_header_len(void);
 uint16_t get_tcp_data_len(void);
-void make_tcp_ack(const uint8_t *mac, const uint8_t *ip, const uint16_t dlen, const uint8_t flag);
+void make_tcp_ack(const uint16_t dlen, const uint8_t flag);
 
 #endif

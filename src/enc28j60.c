@@ -10,6 +10,8 @@ static uint8_t enc28j60_bank;
 
 static uint16_t enc28j60_nextPacketPointer = ENC28J60_RX_START;
 
+const uint8_t mac[] = MAC;
+
 uint8_t enc28j60_readOp(uint8_t op, uint8_t addr)
 {
 	uint8_t sreg = SREG,
@@ -140,7 +142,7 @@ void enc28j60_reset(void)
 	SREG = sreg;
 }
 
-uint8_t enc28j60_init(const uint8_t *macaddr)
+uint8_t enc28j60_init(void)
 {
 	if (!(SPCR & _BV(SPE)))
 		spi_init();
@@ -174,12 +176,12 @@ uint8_t enc28j60_init(const uint8_t *macaddr)
 	enc28j60_writeReg16(MAIPGL, 0x0C12);
 	enc28j60_writeReg(MABBIPG, 0x12);
 	enc28j60_writeReg16(MAMXFLL, ENC28J60_MAX_FRAMELEN);
-	enc28j60_writeReg(MAADR5, macaddr[0]);
-	enc28j60_writeReg(MAADR4, macaddr[1]);
-	enc28j60_writeReg(MAADR3, macaddr[2]);
-	enc28j60_writeReg(MAADR2, macaddr[3]);
-	enc28j60_writeReg(MAADR1, macaddr[4]);
-	enc28j60_writeReg(MAADR0, macaddr[5]);
+	enc28j60_writeReg(MAADR5, mac[0]);
+	enc28j60_writeReg(MAADR4, mac[1]);
+	enc28j60_writeReg(MAADR3, mac[2]);
+	enc28j60_writeReg(MAADR2, mac[3]);
+	enc28j60_writeReg(MAADR1, mac[4]);
+	enc28j60_writeReg(MAADR0, mac[5]);
 	enc28j60_writePhy(PHCON2, PHCON2_HDLDIS);
 
 	/* enable packet reception of packets */

@@ -15,10 +15,6 @@
 #include "ethernet_protocols.h"
 #include "tick.h"
 
-const uint8_t myip[]      = {172,23,92,15},
-              mymac[]     = {0x70,0x69,0x69,0x2D,0x30,0x31},
-              broadcast[] = {172,23,92,255};
-
 volatile uint8_t change       = 1,
                  modi         = 'n',
                  animation    = 1,
@@ -75,7 +71,7 @@ int main(void)
 
 	DDRB |= _BV(PORTB0);
 
-	while (!enc28j60_init(mymac))
+	while (!enc28j60_init())
 		_delay_ms(100);
 
 	sei();
@@ -195,11 +191,11 @@ ISR(INT0_vect)
 		plen = enc28j60_packetReceive();
 
 		/* process ARP packets */
-		if (eth_type_is_arp_and_my_ip(plen, myip) &&
+		if (eth_type_is_arp_and_my_ip(plen) &&
 		    enc28j60_buffer[ETH_ARP_OPCODE_L_P] == ETH_ARP_OPCODE_REQ_L_V) {
-			make_arp_answer_from_request(mymac, myip);
+			make_arp_answer_from_request();
 		/* proccess TCP/IPv4 packets */
-		} else if (eth_type_is_ip_and_my_ip(plen, myip, broadcast) &&
+		} else if (eth_type_is_ip_and_my_ip(plen) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_TCP_V &&
 		           enc28j60_buffer[TCP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[TCP_DST_PORT_L_P] == 0x00) {
 			/* timeout */
@@ -208,20 +204,20 @@ ISR(INT0_vect)
 				if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_SYN_V) {
 					memcpy(&lock.ip, enc28j60_buffer + IP_SRC_P, 4);
 					lock.time = systick;
-					make_tcp_synack(mymac, myip);
+					make_tcp_synack();
 				/* timeout, no syn, RST */
 				} else {
-					make_tcp_ack(mymac, myip, 0, TCP_FLAGS_RST_V);
+					make_tcp_ack(0, TCP_FLAGS_RST_V);
 				}
 			/* no timeout and wrong ip, reset connection */
 			} else if (memcmp(&lock.ip, enc28j60_buffer + IP_SRC_P, 4) != 0) {
-				make_tcp_ack(mymac, myip, 0, TCP_FLAGS_RST_V);
+				make_tcp_ack(0, TCP_FLAGS_RST_V);
 			/*
 			 * no timeout and right ip
 			 */
 			/* stop stream after fin, reset lock */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_FIN_V) {
-				make_tcp_ack(mymac, myip, 0, TCP_FLAGS_FIN_V);
+				make_tcp_ack(0, TCP_FLAGS_FIN_V);
 				lock.time = (systick <= LOCK_TIMEOUT)?0:(systick - LOCK_TIMEOUT);
 			/* rst or ack/rst, closed, reset lock */
 			} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_RST_V) {
@@ -339,11 +335,11 @@ ISR(INT0_vect)
 				} else {
 					ERR("protocol error");
 				}
-				make_tcp_ack(mymac, myip, plen, flags);
+				make_tcp_ack(plen, flags);
 			/* reply with ack */
 			/* maybe I should resend the data if no ack is received after data being sent */
 			//} else if (enc28j60_buffer[TCP_FLAGS_P] & TCP_FLAGS_ACK_V) {
-			//	make_tcp_ack(mymac, myip, 0, 0);
+			//	make_tcp_ack(0, 0);
 			} else {
 				/* some TCP flag I did not account for */
 			}

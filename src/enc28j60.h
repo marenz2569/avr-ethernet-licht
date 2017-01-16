@@ -46,7 +46,7 @@ void enc28j60_writePhy(uint8_t addr, uint16_t data);
 
 void enc28j60_reset(void);
 
-uint8_t enc28j60_init(const uint8_t *macaddr);
+uint8_t enc28j60_init(void);
 
 uint16_t enc28j60_packetReceive(void);
 

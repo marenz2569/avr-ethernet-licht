@@ -29,15 +29,13 @@ volatile uint8_t change       = 1,
 #define MACRO_TO_STRING(x) \
         NAME(x)
 
-/* send error message and close tcp session */
-#define ERR(e) \
-        plen = send_reply_P('e', PSTR(e)); \
+/* send RST */
+#define ERR \
 	flags = TCP_FLAGS_RST_V; \
 	lock.time = (systick <= LOCK_TIMEOUT)?0:(systick - LOCK_TIMEOUT)
 
-/* send ok message */
+/* send ACK */
 #define OK \
-        plen = send_reply_P(modi, PSTR("")); \
 	ws2812_locked = 1; \
 	change = 1
 
@@ -239,7 +237,7 @@ ISR(INT0_vect)
 					 */
 					case 'a':
 						if (cmdlen < 3) {
-							ERR("protocol error");
+							ERR;
 							break;
 						}
 						memcpy(&pixel.color, data + 3, 3);
@@ -259,7 +257,7 @@ ISR(INT0_vect)
 						break;
 					case 'n':
 						if (cmdlen < 1) {
-							ERR("protocol error");
+							ERR;
 							break;
 						}
 						switch (animation = data[3]) {
@@ -271,7 +269,7 @@ ISR(INT0_vect)
 						 */
 						case 1:
 							if (cmdlen < 2) {
-								ERR("protocol error");
+								ERR;
 								break;
 							}
 							if (data[4]) {
@@ -289,7 +287,7 @@ ISR(INT0_vect)
 							OK;
 							break;
 						default:
-							ERR("protocol error");
+							ERR;
 							break;
 						}
 						break;
@@ -303,7 +301,7 @@ ISR(INT0_vect)
 						if (cmdlen < 5 ||
 						    (cmdlen - 2) % 3 != 0 ||
 						    (cmdlen - 2) % 3 + offset > ws2812_LEDS) {
-							ERR("protocol error");
+							ERR;
 							break;
 						}
 						cmdlen = (cmdlen - 2) / 3 - 1;
@@ -318,7 +316,7 @@ ISR(INT0_vect)
 					 */
 					case 's':
 						if (cmdlen < 5 && cmdlen % 5 != 0) {
-							ERR("protocol error");
+							ERR;
 							break;
 						}
 						cmdlen /= 5;
@@ -330,10 +328,10 @@ ISR(INT0_vect)
 						OK;
 						break;
 					default:
-						ERR("protocol error");
+						ERR;
 					}
 				} else {
-					ERR("protocol error");
+					ERR;
 				}
 				make_tcp_ack(plen, flags);
 			/* reply with ack */

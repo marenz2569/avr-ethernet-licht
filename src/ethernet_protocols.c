@@ -9,8 +9,8 @@
         enc28j60_buffer[to] = (data) >> 8; \
         enc28j60_buffer[to+1] = data
 
-const uint8_t __flash ip[]        = IP,
-                      broadcast[] = BROADCAST;
+const uint8_t ip[]        = IP,
+              broadcast[] = BROADCAST;
 
 uint8_t eth_type_is_arp_and_my_ip(const uint16_t len)
 {

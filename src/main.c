@@ -28,10 +28,10 @@ volatile uint8_t change       = 1,
 #define OK \
 	ws2812_locked = 1; \
 	change = 1; \
-	send_reply_P(modi, PSTR(""))
+	plen = send_reply_P(modi, PSTR(""))
 
 #define ERR \
-        send_reply_P('e', PSTR("protocol error"))
+        plen = send_reply_P('e', PSTR("protocol error"))
 
 #define UNLOCK \
 	ws2812_locked = 0; \
@@ -213,7 +213,7 @@ ISR(INT0_vect)
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_UDP_V &&
 		           enc28j60_buffer[UDP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[UDP_DST_PORT_L_P] == 0x00) {
 			plen = 0;
-			datalen = (uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8);
+			datalen = ((uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8)) - UDP_HEADER_LEN;
 			data_offset = UDP_DATA_P;
 			data = enc28j60_buffer + data_offset;
 			cmdlen = data[2] | data[1] << 8;

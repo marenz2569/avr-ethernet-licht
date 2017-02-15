@@ -1,6 +1,6 @@
 DEVICE     = atmega328p
 CLOCK      = 16000000
-OBJECTS    = src/main.o src/enc28j60.o src/light_ws2812.o src/ws2812.o src/spi.o src/ethernet_protocols.o src/cos_approx.o src/tick.o
+OBJECTS    = src/main.o src/enc28j60.o src/light_ws2812.o src/ws2812.o src/spi.o src/ethernet_protocols.o src/cos_approx.o
 LIBS       = 
 LIBDIR     = 
 LIBINCLUDE = 
@@ -18,6 +18,9 @@ all:	main.hex memory-used
 flash:	all
 	sudo python -c 'import sys, serial, time; ser = serial.Serial(sys.argv[1], 57600); ser.setDTR(0); time.sleep(0.1); ser.setDTR(1); ser.close()' /dev/ttyUSB0
 	sudo $(AVRDUDE) -U flash:w:src/main.hex
+
+flash-usbasp: all
+	sudo avrdude -p$(DEVICE) -cusbasp -U flash:w:src/main.hex
 
 clean:
 	rm -f src/main.hex src/main.elf $(OBJECTS)

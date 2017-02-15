@@ -57,28 +57,6 @@
 #define UDP_CHECKSUM_L_P 0x29
 #define UDP_DATA_P 0x2a
 
-/* TCP */
-#define TCP_SRC_PORT_H_P 0x22
-#define TCP_SRC_PORT_L_P 0x23
-#define TCP_DST_PORT_H_P 0x24
-#define TCP_DST_PORT_L_P 0x25
-// the tcp seq number is 4 bytes 0x26-0x29
-#define TCP_SEQ_H_P 0x26
-#define TCP_ACK_H_P 0x2a
-// flags: SYN=2
-#define TCP_FLAGS_P 0x2f
-#define TCP_FLAGS_FIN_V 1
-#define TCP_FLAGS_SYN_V 2
-#define TCP_FLAGS_RST_V 4
-#define TCP_FLAGS_PUSH_V 8
-#define TCP_FLAGS_ACK_V 0x10
-//  plain len without the options:
-#define TCP_HEADER_LEN_PLAIN 20
-#define TCP_HEADER_LEN_P 0x2e
-#define TCP_CHECKSUM_H_P 0x32
-#define TCP_CHECKSUM_L_P 0x33
-#define TCP_OPTIONS_P 0x36
-
 extern const uint8_t mac[];
 
 uint8_t eth_type_is_arp_and_my_ip(const uint16_t len);
@@ -87,10 +65,5 @@ void make_arp_answer_from_request(void);
 uint8_t eth_type_is_ip_and_my_ip(const uint16_t len);
 
 void makeUdpReply(uint16_t datalen, const uint16_t port);
-
-void make_tcp_synack(void);
-uint16_t get_tcp_header_len(void);
-uint16_t get_tcp_data_len(void);
-void make_tcp_ack(const uint16_t dlen, const uint8_t flag);
 
 #endif

@@ -47,7 +47,7 @@ uint8_t eth_type_is_ip_and_my_ip(const uint16_t len)
 static void fill_checksum(uint8_t dest, const uint8_t off, uint16_t len, const uint8_t type)
 {
 	const uint8_t *ptr = enc28j60_buffer + off;
-	uint32_t sum = type==1?IP_PROTO_UDP_V+len-8:type==2?IP_PROTO_TCP_V+len-8:0;
+	uint32_t sum = type==1?IP_PROTO_UDP_V+len-8:0;
 
 	enc28j60_buffer[dest] = 0x00;
 	enc28j60_buffer[dest + 1] = 0x00;
@@ -103,110 +103,4 @@ void makeUdpReply(uint16_t datalen, const uint16_t port)
 	fill_checksum(UDP_CHECKSUM_H_P, IP_SRC_P, 16 + datalen, 1);
 
 	enc28j60_packetSend(ETH_HEADER_LEN + IP_HEADER_LEN + UDP_HEADER_LEN + datalen);
-}
-
-void make_tcphead(uint8_t *buf,uint16_t len,uint8_t mss,uint8_t cp_seq)
-{
-	uint64_t tmp;
-
-	memcpy(&tmp, buf + TCP_DST_PORT_H_P, 2);
-	memcpy(buf + TCP_DST_PORT_H_P, buf + TCP_SRC_PORT_H_P, 2);
-	memcpy(buf + TCP_SRC_PORT_H_P, &tmp, 2);
-
-	memcpy(&tmp, buf + TCP_SEQ_H_P, 4);
-	memcpy(buf + TCP_SEQ_H_P, buf + TCP_ACK_H_P, 4);
-	tmp = (uint64_t) ((((uint32_t) tmp & 0x000000ff) << 24) | (((uint32_t) tmp & 0x0000ff00) << 8) | (((uint32_t) tmp & 0x00ff0000) >> 8) | (((uint32_t) tmp & 0xff000000) >> 24));
-	tmp += len;
-	tmp = (uint64_t) ((((uint32_t) tmp & 0x000000ff) << 24) | (((uint32_t) tmp & 0x0000ff00) << 8) | (((uint32_t) tmp & 0x00ff0000) >> 8) | (((uint32_t) tmp & 0xff000000) >> 24));
-	memcpy(buf + TCP_ACK_H_P, &tmp, 4);
-
-        if (cp_seq==0){
-                // put inital seq number
-                buf[TCP_SEQ_H_P+0]= 0;
-                buf[TCP_SEQ_H_P+1]= 0;
-                buf[TCP_SEQ_H_P+2]= 0x0a; 
-                buf[TCP_SEQ_H_P+3]= 0;
-        }
-        // zero the checksum
-        buf[TCP_CHECKSUM_H_P]=0;
-        buf[TCP_CHECKSUM_L_P]=0;
-
-        // The tcp header length is only a 4 bit field (the upper 4 bits).
-        // It is calculated in units of 4 bytes. 
-        // E.g 24 bytes: 24/4=6 => 0x60=header len field
-        //buf[TCP_HEADER_LEN_P]=(((TCP_HEADER_LEN_PLAIN+4)/4)) <<4; // 0x60
-        if (mss){
-                // the only option we set is MSS to 1408:
-                // 1408 in hex is 0x580
-                buf[TCP_OPTIONS_P]=2;
-                buf[TCP_OPTIONS_P+1]=4;
-                buf[TCP_OPTIONS_P+2]=0x05; 
-                buf[TCP_OPTIONS_P+3]=0x80;
-                // 24 bytes:
-                buf[TCP_HEADER_LEN_P]=0x60;
-        }else{
-                // no options:
-                // 20 bytes:
-                buf[TCP_HEADER_LEN_P]=0x50;
-        }
-}
-
-static void make_tcp_checksum_and_send(uint16_t len)
-{
-	/* checksum calculation starts at IP_SRC_P and contains full TCP header and data */
-	fill_checksum(TCP_CHECKSUM_H_P, IP_SRC_P, 8 + TCP_HEADER_LEN_PLAIN + len, 2);
-
-	enc28j60_packetSend(ETH_HEADER_LEN + IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN + len);
-}
-
-void make_tcp_synack(void)
-{
-	make_return_packet();
-
-	FILL16(IP_TOTLEN_H_P, IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN + 4);
-
-	make_ip_checksum();
-
-	enc28j60_buffer[TCP_FLAGS_P] = TCP_FLAGS_SYN_V | TCP_FLAGS_ACK_V;
-	make_tcphead(enc28j60_buffer, 1, 1, 0);
-
-	make_tcp_checksum_and_send(4);
-}
-
-uint16_t get_tcp_header_len(void)
-{
-	return (uint16_t) ((enc28j60_buffer[TCP_HEADER_LEN_P] >> 4) * 4);
-}
-
-uint16_t get_tcp_data_len(void)
-{
-	int16_t i = (int16_t) (((int16_t) (enc28j60_buffer[IP_TOTLEN_H_P] << 8)) | enc28j60_buffer[IP_TOTLEN_L_P]);
-	i -= IP_HEADER_LEN;
-	i -= get_tcp_header_len();
-	i = i<0?0:i;
-
-	return (uint16_t) i;
-}
-
-void make_tcp_ack(const uint16_t dlen, const uint8_t flag)
-{
-	uint16_t old_datalen;
-
-	old_datalen = get_tcp_data_len();
-
-	make_return_packet();
-
-	FILL16(IP_TOTLEN_H_P, IP_HEADER_LEN + TCP_HEADER_LEN_PLAIN + dlen);
-
-	make_ip_checksum();
-
-        enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V;
-        make_tcphead(enc28j60_buffer,(old_datalen==0)?1:old_datalen,0,1);
-
-	enc28j60_buffer[TCP_FLAGS_P]=TCP_FLAGS_ACK_V | flag;
-	if (dlen > 0) {
-		enc28j60_buffer[TCP_FLAGS_P] |= TCP_FLAGS_PUSH_V;
-	}
-
-	make_tcp_checksum_and_send(dlen);
 }

@@ -1,10 +1,6 @@
 #include <avr/interrupt.h>
 
-#include "enc28j60.h"
-#include "enc28j60_defs.h"
-#include "ws2812_config.h"
 #include "ws2812.h"
-#include "spi.h"
 
 // Timing in ns
 #define w_zeropulse   350
@@ -68,20 +64,15 @@ if (!ws2812_locked) {
   uint8_t ctr, masklo, maskhi;
   volatile uint8_t curbyte;
   uint8_t sreg_prev;
-  uint16_t datalen = ws2812_LEDS * 3;
-  ws2812_DDRREG |= _BV(ws2812_PIN); // Enable output
+  uint16_t i;
+  WS2812_DDRREG |= _BV(WS2812_PIN); // Enable output
   
-  enc28j60_writeReg16(ERDPTL, ENC28J60_HEAP_START);
-  sreg_prev=SREG;
-  cli();
-  ENC28J60_enable;
-  spi_wrrd(ENC28J60_READ_BUF_MEM);
-		masklo = ~_BV(ws2812_PIN) & ws2812_PORTREG;
-		maskhi = _BV(ws2812_PIN) | ws2812_PORTREG;
+		masklo = ~_BV(WS2812_PIN) & WS2812_PORTREG;
+		maskhi = _BV(WS2812_PIN) | WS2812_PORTREG;
 
-    do {
+    for (i=0; i<WS2812_LEDS*3; i++) {
 	//grb
-	curbyte = spi_wrrd(0x00);
+	curbyte = *(((uint8_t *) ws2812_buffer) + i);
 asm volatile(
     "       ldi   %0,8  \n\t"
     "loop%=:            \n\t"
@@ -144,11 +135,9 @@ w_nop16
     "       dec   %0    \n\t"    //  '1' [+4] '0' [+3]
     "       brne  loop%=\n\t"    //  '1' [+5] '0' [+4]
     :	"=&d" (ctr)
-    :	"r" (curbyte), "I" (_SFR_IO_ADDR(ws2812_PORTREG)), "r" (maskhi), "r" (masklo)
+    :	"r" (curbyte), "I" (_SFR_IO_ADDR(WS2812_PORTREG)), "r" (maskhi), "r" (masklo)
 //    :	"r" (curbyte), "x" (port), "r" (maskhi), "r" (masklo)
     );
-  } while (--datalen);
-  ENC28J60_disable;
-  SREG=sreg_prev;
+  }
 }
 }

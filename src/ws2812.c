@@ -1,32 +1,15 @@
 #include <avr/interrupt.h>
 #include <math.h>
+#include <string.h>
 
 #include "ws2812.h"
 #include "ws2812_config.h"
-#include "enc28j60.h"
-#include "enc28j60_config.h"
-#include "enc28j60_defs.h"
-#include "spi.h"
 #include "cos_approx.h"
 
-uint8_t ws2812_set_rgb_at(uint16_t index, const rgb t)
+uint8_t ws2812_set_rgb_at(const uint16_t index, const rgb * const t)
 {
-	if (index < ws2812_LEDS && !ws2812_locked) {
-		enc28j60_writeReg16(EWRPTL, ENC28J60_HEAP_START + index * 3);
-
-		uint8_t sreg = SREG;
-
-		cli();
-		ENC28J60_enable;
-
-		spi_wrrd(ENC28J60_WRITE_BUF_MEM);
-
-		spi_wrrd(t.g);
-		spi_wrrd(t.r);
-		spi_wrrd(t.b);
-
-		ENC28J60_disable;
-		SREG = sreg;
+	if (index < WS2812_LEDS && !ws2812_locked) {
+		memcpy(ws2812_buffer + index, t, 3);
 
 		return 1;
 	}

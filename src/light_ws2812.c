@@ -70,6 +70,9 @@ if (!ws2812_locked) {
 		masklo = ~_BV(WS2812_PIN) & WS2812_PORTREG;
 		maskhi = _BV(WS2812_PIN) | WS2812_PORTREG;
 
+	sreg_prev = SREG;
+	cli();
+
     for (i=0; i<WS2812_LEDS*3; i++) {
 	//grb
 	curbyte = *(((uint8_t *) ws2812_buffer) + i);
@@ -139,5 +142,6 @@ w_nop16
 //    :	"r" (curbyte), "x" (port), "r" (maskhi), "r" (masklo)
     );
   }
+	SREG = sreg_prev;
 }
 }

@@ -65,13 +65,14 @@ if (!ws2812_locked) {
   volatile uint8_t curbyte;
   uint8_t sreg_prev;
   uint16_t i;
+
+	sreg_prev = SREG;
+	cli();
+
   WS2812_DDRREG |= _BV(WS2812_PIN); // Enable output
   
 		masklo = ~_BV(WS2812_PIN) & WS2812_PORTREG;
 		maskhi = _BV(WS2812_PIN) | WS2812_PORTREG;
-
-	sreg_prev = SREG;
-	cli();
 
     for (i=0; i<WS2812_LEDS*3; i++) {
 	//grb

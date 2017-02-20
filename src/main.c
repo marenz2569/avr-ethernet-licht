@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <util/delay.h>
 #include <avr/io.h>
+#include <avr/sleep.h>
 #include <stdlib.h>
 #include <string.h>
 #include <avr/interrupt.h>
@@ -64,6 +65,8 @@ int main(void)
 	while (!enc28j60_init())
 		_delay_ms(100);
 
+	set_sleep_mode(SLEEP_MODE_STANDBY);
+
 	sei();
 	EIMSK = _BV(INT0);
 
@@ -108,7 +111,7 @@ int main(void)
 			UNLOCK;
 			ws2812_sync();
 			while (!change) {
-                                _delay_us(0.0000000000000625);
+				sleep_mode();
 			}
                         break;
 		case 'n':
@@ -291,16 +294,15 @@ ISR(INT0_vect)
 				 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
 				 */
 				case 'r':
-					offset = (uint16_t) (data[3] >> 8) | data[4];
+					offset = (uint16_t) (data[3] << 8) | data[4];
 					if (cmdlen < 5 ||
 					    (cmdlen - 2) % 3 != 0 ||
 					    (cmdlen - 2) % 3 + offset > WS2812_LEDS) {
 						ERR;
 						break;
 					}
-					cmdlen = (cmdlen - 2) / 3 - 1;
-					start = enc28j60_curPacketPointer + 6 + data_offset + 5;
-					enc28j60_dma(start, start + cmdlen, offset * 3 + ENC28J60_HEAP_START);
+					enc28j60_writeReg16(ERDPTL, enc28j60_curPacketPointer + 6 + data_offset + 5);
+					enc28j60_readBuf(cmdlen - 2, (uint8_t *) (ws2812_buffer + offset * 3));
 					OK;
 					break;
 				/*

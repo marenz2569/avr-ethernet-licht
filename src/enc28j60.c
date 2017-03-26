@@ -54,9 +54,9 @@ void enc28j60_readBuf(uint16_t len, uint8_t *data)
 
 	spi_wrrd(ENC28J60_READ_BUF_MEM);
 
-	do
+	do {
 		*data++ = spi_wrrd(0x00);
-	while (--len);
+	} while (--len);
 
 	ENC28J60_disable;
 	SREG = sreg;
@@ -77,6 +77,16 @@ void enc28j60_writeBuf(uint16_t len, const uint8_t *data)
 
 	ENC28J60_disable;
 	SREG = sreg;
+}
+
+void enc28j60_set_random_access(uint16_t offset)
+{
+	uint16_t j;
+
+	j = (enc28j60_curPacketPointer + offset) % (ENC28J60_RX_END + 1);
+	j += ENC28J60_RX_START%(ENC28J60_RX_START + (j % (enc28j60_curPacketPointer + offset)));
+
+	enc28j60_writeReg16(ERDPTL, j);
 }
 
 void enc28j60_setBank(uint8_t addr)
@@ -209,13 +219,13 @@ uint16_t enc28j60_packetReceive(void)
 
 		enc28j60_readBuf(sizeof(header), (uint8_t *) &header);
 
-		enc28j60_nextPacketPointer = header.nextPacket;
-
 		len = header.length - 4;
 		if (len > ENC28J60_BUFFERSIZE)
 			len = ENC28J60_BUFFERSIZE;
 
 		enc28j60_readBuf(len, enc28j60_buffer);
+
+		enc28j60_nextPacketPointer = header.nextPacket;
 	}
 	return len;
 }

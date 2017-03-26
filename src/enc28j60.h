@@ -30,6 +30,8 @@ void enc28j60_readBuf(uint16_t len, uint8_t *data);
 
 void enc28j60_writeBuf(uint16_t len, const uint8_t *data);
 
+void enc28j60_set_random_access(uint16_t offset);
+
 void enc28j60_setBank(uint8_t addr);
 
 uint8_t enc28j60_readReg(uint8_t addr);

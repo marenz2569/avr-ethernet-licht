@@ -37,6 +37,7 @@
 #define IP_CHECKSUM_P 0x18
 #define IP_TTL_P 0x16
 #define IP_FLAGS_P 0x14
+#define IP_ID_P 0x12
 #define IP_P 0xe
 #define IP_TOTLEN_H_P 0x10
 #define IP_TOTLEN_L_P 0x11
@@ -63,6 +64,8 @@ uint8_t eth_type_is_arp_and_my_ip(const uint16_t len);
 void make_arp_answer_from_request(void);
 
 uint8_t eth_type_is_ip_and_my_ip(const uint16_t len);
+
+int16_t check_checksum(const uint8_t dest, const uint8_t off, uint16_t len, const uint8_t type);
 
 void makeUdpReply(uint16_t datalen, const uint16_t port);
 

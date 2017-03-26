@@ -1,7 +1,6 @@
 #include <stdint.h>
 #include <util/delay.h>
 #include <avr/io.h>
-#include <avr/sleep.h>
 #include <stdlib.h>
 #include <string.h>
 #include <avr/interrupt.h>
@@ -65,12 +64,11 @@ int main(void)
 	while (!enc28j60_init())
 		_delay_ms(100);
 
-	set_sleep_mode(SLEEP_MODE_STANDBY);
-
-	sei();
 	EIMSK = _BV(INT0);
 
 	PORTB |= _BV(PORTB0);
+
+	sei();
 
 	UNLOCK;
 
@@ -111,7 +109,6 @@ int main(void)
 			UNLOCK;
 			ws2812_sync();
 			while (!change) {
-				sleep_mode();
 			}
                         break;
 		case 'n':
@@ -154,6 +151,7 @@ int main(void)
 					}
 					_delay_ms(40);
 				}
+				break;
 			/*
 			 * BLAU/WEISZ
 			 * C: "n" + LEN (0x0001) + 0x03
@@ -174,6 +172,7 @@ int main(void)
 					}
 					_delay_ms(100);
 				}
+				break;
 			default:
 				break;
 			}
@@ -214,7 +213,9 @@ ISR(INT0_vect)
 		/* proccess TCP/IPv4 packets */
 		} else if (eth_type_is_ip_and_my_ip(plen) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_UDP_V &&
-		           enc28j60_buffer[UDP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[UDP_DST_PORT_L_P] == 0x00) {
+		           enc28j60_buffer[UDP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[UDP_DST_PORT_L_P] == 0x00 &&
+		           (0 == check_checksum(UDP_CHECKSUM_H_P, IP_SRC_P, ((uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8)) + 8, 1)) &&
+		           (0 == check_checksum(IP_CHECKSUM_P, IP_P, IP_HEADER_LEN, 0))) {
 			plen = 0;
 			datalen = ((uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8)) - UDP_HEADER_LEN;
 			data_offset = UDP_DATA_P;
@@ -301,7 +302,7 @@ ISR(INT0_vect)
 						ERR;
 						break;
 					}
-					enc28j60_writeReg16(ERDPTL, enc28j60_curPacketPointer + 6 + data_offset + 5);
+					enc28j60_set_random_access(6 + data_offset + 5);
 					enc28j60_readBuf(cmdlen - 2, (uint8_t *) (ws2812_buffer + offset * 3));
 					OK;
 					break;
@@ -316,7 +317,7 @@ ISR(INT0_vect)
 						break;
 					}
 					cmdlen /= 5;
-					enc28j60_writeReg16(ERDPTL, enc28j60_curPacketPointer + 6 + data_offset + 3);
+					enc28j60_set_random_access(6 + data_offset + 3);
 					while (cmdlen--) {
 						enc28j60_readBuf(5, (uint8_t *) &pixel);
 						ws2812_set_rgb_at(pixel.id[0] << 8 | pixel.id[1], &pixel.color);
@@ -325,6 +326,7 @@ ISR(INT0_vect)
 					break;
 				default:
 					ERR;
+					break;
 				}
 			} else {
 				ERR;

@@ -2,8 +2,7 @@
 #define WS2812_H__
 
 #include <stdint.h>
-
-#include "ws2812_config.h"
+#include <string.h>
 
 #define clamp_to_0_1(x)         (x>0?(x<1?x:1):0)
 #define clamp_to_0_255(x)       (x>0?(x<255?x:255):0)
@@ -14,7 +13,9 @@ typedef struct {
 		b;
 } rgb;
 
-rgb ws2812_buffer[WS2812_LEDS];
+extern rgb *ws2812_buffer;
+
+extern const size_t *ws2812_leds;
 
 volatile uint8_t ws2812_locked;
 

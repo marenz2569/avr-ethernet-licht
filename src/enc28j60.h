@@ -3,13 +3,10 @@
 
 #include <stdint.h>
 
-#include "enc28j60_config.h"
+#define ENC28J60_enable         ENC28J60_CS_PORT &= ~_BV(ENC28J60_CS_PIN)
+#define ENC28J60_disable        ENC28J60_CS_PORT |= _BV(ENC28J60_CS_PIN)
 
-#define ENC28J60_enable		ENC28J60_CS_PORT &= ~_BV(ENC28J60_CS_PIN) 
-#define ENC28J60_disable	ENC28J60_CS_PORT |= _BV(ENC28J60_CS_PIN)
-
-#define ENC28J60_MAX_DATALEN_M (ENC28J60_MAX_FRAMELEN_M - 60 - 3)
-
+#define ENC28J60_MAX_FRAMELEN_M 966
 enum {
 	ENC28J60_MAX_FRAMELEN = ENC28J60_MAX_FRAMELEN_M
 };
@@ -20,7 +17,7 @@ enum {
 
 uint16_t enc28j60_curPacketPointer;
 
-uint8_t enc28j60_buffer[ENC28J60_BUFFERSIZE];
+extern uint8_t *enc28j60_buffer;
 
 uint8_t enc28j60_readOp(uint8_t op, uint8_t addr);
 

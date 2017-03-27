@@ -5,6 +5,7 @@
 #include "spi.h"
 #include "enc28j60.h"
 #include "enc28j60_defs.h"
+#include "enc28j60_config.h"
 #include "ethernet_protocols.h"
 #include "ethernet_protocols_config.h"
 

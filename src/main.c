@@ -8,7 +8,6 @@
 #include <stdio.h>
 
 #include "ws2812.h"
-#include "ws2812_config.h"
 #include "enc28j60.h"
 #include "spi.h"
 #include "enc28j60_defs.h"
@@ -41,7 +40,7 @@ volatile uint8_t change       = 1,
         (cmdlen >= x)
 
 #define LEDS_LOOP_BEGIN \
-        i = WS2812_LEDS; \
+        i = *ws2812_leds; \
         while(i--) {
 
 #define LEDS_LOOP_END \
@@ -84,7 +83,7 @@ int main(void)
 
 	x0e_step_per_cycle = 0.625;
 	x0e_steps_for_360 = 360.0 / x0e_step_per_cycle;
-	x0e_led_shift = 360.0  / (float) WS2812_LEDS;
+	x0e_led_shift = 360.0  / (float) *ws2812_leds;
 
 	for (;;) {
 		switch (modi) {
@@ -124,7 +123,7 @@ int main(void)
 				x0e_step_count = 0;
 				while (!change) {
 					LEDS_LOOP_BEGIN
-						pixel = hsi2rgb(x0e_led_shift * (float) (dir?(i + 1):(WS2812_LEDS - i)) + (float) x0e_step_count * x0e_step_per_cycle, 1.0, 1.0);
+						pixel = hsi2rgb(x0e_led_shift * (float) (dir?(i + 1):(*ws2812_leds - i)) + (float) x0e_step_count * x0e_step_per_cycle, 1.0, 1.0);
 						ws2812_set_rgb_at(i, &pixel);
 					LEDS_LOOP_END;
 					ws2812_sync();
@@ -240,14 +239,6 @@ ISR(INT0_vect)
 					LEDS_LOOP_END;
 					OK;
 					break;
-				/*
-				 * INFORMATION
-				 * C: "i" + 0x00
-				 * S: "i" + LEN + JSON-Beschreibung || "e" + LEN + ERROR
-				 */
-				case 'i':
-					plen = send_reply_P('i', PSTR("{\"name\":\"frickel\",\"leds\":"MACRO_TO_STRING(WS2812_LEDS)",\"max_protolen\":"MACRO_TO_STRING(ENC28J60_MAX_DATALEN_M)",\"note\":\"Send all the data in one fucking packet!\"}"));
-					break;
 				case 'n':
 					if (cmdlen < 1) {
 						ERR;
@@ -298,7 +289,7 @@ ISR(INT0_vect)
 					offset = (uint16_t) (data[3] << 8) | data[4];
 					if (cmdlen < 5 ||
 					    (cmdlen - 2) % 3 != 0 ||
-					    (cmdlen - 2) % 3 + offset > WS2812_LEDS) {
+					    (cmdlen - 2) % 3 + offset > *ws2812_leds) {
 						ERR;
 						break;
 					}

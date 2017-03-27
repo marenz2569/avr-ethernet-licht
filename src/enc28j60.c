@@ -12,6 +12,9 @@ static uint16_t enc28j60_nextPacketPointer = ENC28J60_RX_START;
 
 const uint8_t mac[] = MAC;
 
+uint8_t enc28j60_buf[ENC28J60_BUFFERSIZE];
+uint8_t *enc28j60_buffer = enc28j60_buf;
+
 uint8_t enc28j60_readOp(uint8_t op, uint8_t addr)
 {
 	uint8_t sreg = SREG,

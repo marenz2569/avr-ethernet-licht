@@ -1,6 +1,7 @@
 #include <avr/interrupt.h>
 
 #include "ws2812.h"
+#include "ws2812_config.h"
 
 // Timing in ns
 #define w_zeropulse   350
@@ -74,7 +75,7 @@ if (!ws2812_locked) {
 		masklo = ~_BV(WS2812_PIN) & WS2812_PORTREG;
 		maskhi = _BV(WS2812_PIN) | WS2812_PORTREG;
 
-    for (i=0; i<WS2812_LEDS*3; i++) {
+    for (i=0; i<*ws2812_leds*3; i++) {
 	//grb
 	curbyte = *(((uint8_t *) ws2812_buffer) + i);
 asm volatile(

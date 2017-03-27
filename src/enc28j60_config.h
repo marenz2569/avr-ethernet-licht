@@ -1,17 +1,15 @@
 #ifndef ENC28J60_CONFIG_H__
 #define ENC28J60_CONFIG_H__
 
+#include "config.h"
+
 #define ENC28J60_CS_DDR		DDRB
 #define ENC28J60_CS_PORT	PORTB
 #define ENC28J60_CS_PIN		PORTB2
 
-#define MAC {0x70,0x69,0x69,0x2d,0x30,0x31}
-
 enum {
 	ENC28J60_BUFFERSIZE = 200
 };
-
-#define ENC28J60_MAX_FRAMELEN_M 966
 
 enum {
 	ENC28J60_RX_START = 0,

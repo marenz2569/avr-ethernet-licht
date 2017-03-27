@@ -1,10 +1,14 @@
 #include <avr/interrupt.h>
 #include <math.h>
-#include <string.h>
 
 #include "ws2812.h"
 #include "ws2812_config.h"
 #include "cos_approx.h"
+
+rgb ws2812_buf[WS2812_LEDS];
+rgb *ws2812_buffer = ws2812_buf;
+const size_t ws2812_led = WS2812_LEDS;
+const size_t *ws2812_leds = &ws2812_led;
 
 uint8_t ws2812_set_rgb_at(const uint16_t index, const rgb * const t)
 {

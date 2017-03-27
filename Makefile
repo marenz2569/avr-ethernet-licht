@@ -8,6 +8,15 @@ FUSES      = -U lfuse:w:0xfe:m -U hfuse:w:0xd9:m -U efuse:w:0xff:m
 TARGETS = $(shell ls configs/*.h)
 override _TARGETS = $(basename $(notdir $(TARGETS)))
 
+FLASH = 
+
+ifdef FLASH
+override _FLASH = $(basename $(notdir $(FLASH)))
+override _TARGETS = 
+else
+override _FLASH =
+endif
+
 AVRDUDE = avrdude -C/usr/share/arduino/hardware/tools/avrdude.conf -q -q -cstk500v1 -pm328p -P/dev/ttyUSB0 -b57600 -D
 COMPILE = avr-gcc -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -std=gnu99
 
@@ -18,7 +27,7 @@ NC = \033[0m
 
 .PRECIOUS: %.elf
 
-all:	$(addsuffix .hex, $(_TARGETS))
+all:	$(addsuffix .hex, $(_TARGETS)) $(addsuffix .flash, $(_FLASH))
 
 objects: $(OBJECTS)
 

@@ -172,6 +172,11 @@ int main(void)
 					_delay_ms(100);
 				}
 				break;
+			case 4:
+				UNLOCK;
+				while (!change) {
+					_delay_ms(40);
+				}
 			default:
 				break;
 			}
@@ -238,6 +243,18 @@ ISR(INT0_vect)
 						ws2812_set_rgb_at(i, &pixel.color);
 					LEDS_LOOP_END;
 					OK;
+					break;
+				/*
+				 * INFORMATION
+				 * C: "i" + 0x00
+				 * S: "i" + LEN + #LEDs || "e" + LEN + ERROR
+				 */
+				case 'i':
+					plen = sprintf(enc28j60_buffer + UDP_DATA_P + 3, "%u", *ws2812_leds);
+					enc28j60_buffer[UDP_DATA_P] = 'i';
+					enc28j60_buffer[UDP_DATA_P+1] = plen >> 8;
+					enc28j60_buffer[UDP_DATA_P+2] = plen;
+					plen += 3;
 					break;
 				case 'n':
 					if (cmdlen < 1) {

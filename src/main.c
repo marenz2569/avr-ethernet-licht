@@ -6,17 +6,20 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "ws2812.h"
 #include "enc28j60.h"
 #include "spi.h"
 #include "enc28j60_defs.h"
 #include "ethernet_protocols.h"
+#include "config.h"
 
 volatile uint8_t change       = 1,
                  modi         = 'n',
                  animation    = 1,
                  dir          = 1;
+volatile float nx1_step_per_cycle = NX1_STEP_PER_CYCLE;
 
 #define NAME(name) \
         #name
@@ -74,16 +77,13 @@ int main(void)
 	rgb pixel;
 
 	uint8_t j;
-	uint16_t i,
-	         x0e_step_count,
-	         x0e_steps_for_360;
+	uint16_t i;
 
-	float x0e_led_shift,
-	      x0e_step_per_cycle;
+	float nx1_led_shift,
+	      nx1_steps_for_360,
+	      nx1_step_count;
 
-	x0e_step_per_cycle = 0.625;
-	x0e_steps_for_360 = 360.0 / x0e_step_per_cycle;
-	x0e_led_shift = 360.0  / (float) *ws2812_leds;
+	nx1_led_shift = 360.0  / (float) *ws2812_leds;
 
 	for (;;) {
 		switch (modi) {
@@ -114,20 +114,22 @@ int main(void)
 			switch (animation) {
 			/*
 			 * FARBVERLAUF
-			 * C: "n" + LEN (0x0002) + 0x0100
+			 * C: "n" + LEN (0x0002) + 0x0100 + [NX1_STEP_PER_CYCLE]
 			 * oder
-			 * C: "n" + LEN (0x0002) + 0x01FF
+			 * C: "n" + LEN (0x0002) + 0x01FF + [NX1_STEP_PER_CYCLE]
+			 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
 			 */
 			case 1:
 				UNLOCK;
-				x0e_step_count = 0;
+				nx1_step_count = 0.0;
+				nx1_steps_for_360 = 360.0 / nx1_step_per_cycle;
 				while (!change) {
 					LEDS_LOOP_BEGIN
-						pixel = hsi2rgb(x0e_led_shift * (float) (dir?(i + 1):(*ws2812_leds - i)) + (float) x0e_step_count * x0e_step_per_cycle, 1.0, 1.0);
+						pixel = hsi2rgb(nx1_led_shift * (float) (dir?(i + 1):(*ws2812_leds - i)) + nx1_step_count * nx1_step_per_cycle, 1.0, 1.0);
 						ws2812_set_rgb_at(i, &pixel);
 					LEDS_LOOP_END;
 					ws2812_sync();
-					x0e_step_count = ++x0e_step_count % x0e_steps_for_360;
+					nx1_step_count = fmod(++nx1_step_count, nx1_steps_for_360);
 				}
 				break;
 			/*
@@ -172,11 +174,6 @@ int main(void)
 					_delay_ms(100);
 				}
 				break;
-			case 4:
-				UNLOCK;
-				while (!change) {
-					_delay_ms(40);
-				}
 			default:
 				break;
 			}
@@ -199,10 +196,6 @@ ISR(INT0_vect)
 		uint8_t id[2];
 		rgb color;
 	} pixel;
-	static struct {
-		uint64_t time;
-		uint32_t ip;
-	} lock = { .time = 0, .ip = 0 };
 
 	enc28j60_writeOp(ENC28J60_BIT_FIELD_CLR, EIE, EIE_INTIE);
 
@@ -225,7 +218,7 @@ ISR(INT0_vect)
 			data_offset = UDP_DATA_P;
 			data = enc28j60_buffer + data_offset;
 			cmdlen = data[2] | data[1] << 8;
-			if (datalen > 3 && cmdlen == (datalen - 3)) {
+			if (datalen >= 3 && cmdlen == (datalen - 3)) {
 				switch (modi = data[0]) {
 				/*
 				 * ALLSET
@@ -233,7 +226,7 @@ ISR(INT0_vect)
 				 * S: "a" + LEN (0x0000) || "e" + LEN + ERROR
 				 */
 				case 'a':
-					if (cmdlen < 3) {
+					if (!checklen(3)) {
 						ERR;
 						break;
 					}
@@ -246,32 +239,40 @@ ISR(INT0_vect)
 					break;
 				/*
 				 * INFORMATION
-				 * C: "i" + 0x00
+				 * C: "i" + 0x0000
 				 * S: "i" + LEN + #LEDs || "e" + LEN + ERROR
 				 */
 				case 'i':
-					plen = sprintf(enc28j60_buffer + UDP_DATA_P + 3, "%u", *ws2812_leds);
-					enc28j60_buffer[UDP_DATA_P] = 'i';
-					enc28j60_buffer[UDP_DATA_P+1] = plen >> 8;
-					enc28j60_buffer[UDP_DATA_P+2] = plen;
+					plen = sprintf(data + 3, "%u", *ws2812_leds);
+					data[0] = 'i';
+					data[1] = plen >> 8;
+					data[2] = plen;
 					plen += 3;
 					break;
 				case 'n':
-					if (cmdlen < 1) {
+					if (!checklen(1)) {
 						ERR;
 						break;
 					}
 					switch (animation = data[3]) {
 					/*
 					 * FARBVERLAUF
-					 * C: "n" + LEN (0x0002) + 0x0100
+					 * C: "n" + LEN (0x0002) + 0x0100 + [NX1_STEP_PER_CYCLE]
 					 * oder
-					 * C: "n" + LEN (0x0002) + 0x01FF
+					 * C: "n" + LEN (0x0002) + 0x01FF + [NX1_STEP_PER_CYCLE]
+				 	 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
 					 */
 					case 1:
-						if (cmdlen < 2) {
+						if (!checklen(2)) {
 							ERR;
 							break;
+						}
+						if (checklen(6)) {
+							for (i = 4; i > 0; i--) {
+								*((uint8_t *) &nx1_step_per_cycle + i - 1) = *(data + 3 + 2 + 4 - i);
+							}
+						} else {
+							nx1_step_per_cycle = NX1_STEP_PER_CYCLE;
 						}
 						if (data[4]) {
 							dir = 1;
@@ -304,7 +305,7 @@ ISR(INT0_vect)
 				 */
 				case 'r':
 					offset = (uint16_t) (data[3] << 8) | data[4];
-					if (cmdlen < 5 ||
+					if (!checklen(5) ||
 					    (cmdlen - 2) % 3 != 0 ||
 					    (cmdlen - 2) % 3 + offset > *ws2812_leds) {
 						ERR;
@@ -320,7 +321,7 @@ ISR(INT0_vect)
 				 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
 				 */
 				case 's':
-					if (cmdlen < 5 && cmdlen % 5 != 0) {
+					if (!checklen(5) && cmdlen % 5 != 0) {
 						ERR;
 						break;
 					}

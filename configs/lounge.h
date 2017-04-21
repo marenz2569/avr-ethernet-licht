@@ -8,4 +8,6 @@
 
 #define WS2812_LEDS 116
 
+#define NX1_STEP_PER_CYCLE 0.625
+
 #endif

@@ -39,7 +39,7 @@ objects: $(OBJECTS)
 	sudo $(AVRDUDE) -U flash:w:$<
 
 clean:
-	rm -f $(addsuffix .hex, $(_TARGETS)) $(addsuffix .elf, $(_TARGETS)) $(OBJECTS) src/config.h
+	rm -f $(addsuffix .hex, $(_TARGETS)) $(addsuffix .elf, $(_TARGETS)) $(OBJECTS) $(VOBJECTS) src/config.h
 
 %.elf: FORCE
 	echo "$(PUR)Building objects$(NC)"

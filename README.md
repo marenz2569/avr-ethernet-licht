@@ -1,4 +1,4 @@
-see lgplv2.1 in LICENSE file.# avr-ethernet-licht
+# avr-ethernet-licht
 
 Mehr Informationen gibt es in der [Wiki](https://chch.it/Fensterbogenbeleuchtung).
 

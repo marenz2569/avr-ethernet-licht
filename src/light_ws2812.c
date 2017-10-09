@@ -61,7 +61,6 @@
 
 void ws2812_sync(void)
 {
-if (!ws2812_locked) {
   uint8_t ctr, masklo, maskhi;
   volatile uint8_t curbyte;
   uint8_t sreg_prev;
@@ -145,5 +144,4 @@ w_nop16
     );
   }
 	SREG = sreg_prev;
-}
 }

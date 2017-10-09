@@ -17,8 +17,6 @@ extern rgb *ws2812_buffer;
 
 extern const size_t *ws2812_leds;
 
-volatile uint8_t ws2812_locked;
-
 void ws2812_sync();
 
 uint8_t ws2812_set_rgb_at(const uint16_t index, const rgb * const t);

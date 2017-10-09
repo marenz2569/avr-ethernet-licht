@@ -15,29 +15,21 @@
 #include "ethernet_protocols.h"
 #include "config.h"
 
-volatile uint8_t change       = 1,
-                 modi         = 'n',
-                 animation    = 1,
-                 dir          = 1;
-volatile float nx1_step_per_cycle = NX1_STEP_PER_CYCLE;
-
-#define NAME(name) \
-        #name
-
-#define MACRO_TO_STRING(x) \
-        NAME(x)
-
-#define OK \
-	ws2812_locked = 1; \
-	change = 1; \
-	plen = send_reply_P(modi, PSTR(""))
+struct config {
+	uint8_t modi,
+	        animation,
+	        dir;
+	float nx1_step_per_cycle;
+} config_global = {
+	.modi = 'n',
+	.animation = 1,
+	.dir = 1,
+	.nx1_step_per_cycle = NX1_STEP_PER_CYCLE
+};
 
 #define ERR \
-        plen = send_reply_P('e', PSTR("protocol error"))
-
-#define UNLOCK \
-	ws2812_locked = 0; \
-	change = 0
+        plen = send_reply_P('e', PSTR("protocol error")); \
+				err = 1
 
 #define checklen(x) \
         (cmdlen >= x)
@@ -48,6 +40,12 @@ volatile float nx1_step_per_cycle = NX1_STEP_PER_CYCLE;
 
 #define LEDS_LOOP_END \
         }
+
+#define MODI_CHANGE(x) \
+        if (0 != memcmp(&config_global, &config_old, sizeof(config_global))) { \
+					memcpy(&config_old, &config_global, sizeof(config_global)); \
+        	x \
+				}
 
 uint16_t send_reply_P(const char command, const char *message)
 {
@@ -61,21 +59,9 @@ uint16_t send_reply_P(const char command, const char *message)
 
 int main(void)
 {
-	DDRB |= _BV(PORTB0);
-
-	while (!enc28j60_init())
-		_delay_ms(100);
-
-	EIMSK = _BV(INT0);
-
-	PORTB |= _BV(PORTB0);
-
-	sei();
-
-	UNLOCK;
-
 	rgb pixel;
 
+	struct config config_old = config_global;
 	uint8_t j;
 	uint16_t i;
 
@@ -85,119 +71,97 @@ int main(void)
 
 	nx1_led_shift = 360.0  / (float) *ws2812_leds;
 
+	DDRB |= _BV(PORTB0);
+
+	while (!enc28j60_init())
+		_delay_ms(100);
+
+	EIMSK = _BV(INT0);
+	EICRA = ~(_BV(ISC01) | _BV(ISC00));
+
+	PORTB |= _BV(PORTB0);
+
+	sei();
+
 	for (;;) {
-		switch (modi) {
-		/*
-		 * ALLSET
-		 * C: "a" + LEN + GRB (3 Bytes)
-		 * S: "a" + LEN (0x0000) || "e" + LEN + ERROR
-		 */
+		switch (config_global.modi) {
+		/* ALLSET */
 		case 'a':
-		/*
-		 * RANGESET
-		 * C: "r" + LEN + offset (2 Byte) + GRB (3 Byte) ...
-		 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
-		 */
+		/* RANGESET */
 		case 'r':
-		/*
-		 * SET
-		 * C: "s" + LEN + [ledid (2 Byte) + GRB (3 Byte)] ...
-		 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
-		 */
+		/* SET */
 		case 's':
-			UNLOCK;
 			ws2812_sync();
-			while (!change) {
-			}
-                        break;
+			break;
 		case 'n':
-			switch (animation) {
-			/*
-			 * FARBVERLAUF
-			 * C: "n" + LEN (0x0002) + 0x0100 + [NX1_STEP_PER_CYCLE]
-			 * oder
-			 * C: "n" + LEN (0x0002) + 0x01FF + [NX1_STEP_PER_CYCLE]
-			 * S: "s" + LEN (0x0000) || "e" + LEN + ERROR
-			 */
+			switch (config_global.animation) {
+			/* FARBVERLAUF */
 			case 1:
-				UNLOCK;
-				nx1_step_count = 0.0;
-				nx1_steps_for_360 = 360.0 / nx1_step_per_cycle;
-				while (!change) {
-					LEDS_LOOP_BEGIN
-						pixel = hsi2rgb(nx1_led_shift * (float) (dir?(i + 1):(*ws2812_leds - i)) + nx1_step_count * nx1_step_per_cycle, 1.0, 1.0);
-						ws2812_set_rgb_at(i, &pixel);
-					LEDS_LOOP_END;
-					ws2812_sync();
-					nx1_step_count = fmod(++nx1_step_count, nx1_steps_for_360);
-				}
+				MODI_CHANGE( \
+					nx1_step_count = 0.0; \
+					nx1_steps_for_360 = 360.0 / config_global.nx1_step_per_cycle; \
+				)
+				LEDS_LOOP_BEGIN
+					pixel = hsi2rgb(nx1_led_shift * (float) (config_global.dir?(i + 1):(*ws2812_leds - i)) + nx1_step_count * config_global.nx1_step_per_cycle, 1.0, 1.0);
+					ws2812_set_rgb_at(i, &pixel);
+				LEDS_LOOP_END;
+				ws2812_sync();
+				nx1_step_count = fmod(++nx1_step_count, nx1_steps_for_360);
 				break;
-			/*
-			 * KLINGEL
-			 * C: "n" + LEN (0x0001) + 0x02
-			 */
+			/* KLINGEL */
 			case 2:
-				UNLOCK;
-				j = 0;
-				while (!change) {
-					*(&pixel.g+j) = 0xff; 
-					*(&pixel.g+(j%3==0?1:0)) = 0; 
-					*(&pixel.g+(j%3==2?1:2)) = 0; 
-					LEDS_LOOP_BEGIN
-						ws2812_set_rgb_at(i, &pixel);
-					LEDS_LOOP_END;
-					ws2812_sync();
-					if (++j>=3) {
-						j = 0;
-					}
-					_delay_ms(40);
+				MODI_CHANGE( \
+					j = 0; \
+				)
+				*(&pixel.g+j) = 0xff;
+				*(&pixel.g+(j%3==0?1:0)) = 0;
+				*(&pixel.g+(j%3==2?1:2)) = 0;
+				LEDS_LOOP_BEGIN
+					ws2812_set_rgb_at(i, &pixel);
+				LEDS_LOOP_END;
+				ws2812_sync();
+				if (++j>=3) {
+					j = 0;
 				}
+				_delay_ms(40);
 				break;
-			/*
-			 * BLAU/WEISZ
-			 * C: "n" + LEN (0x0001) + 0x03
-			 */
+			/* BLAU/WEISZ */
 			case 3:
-				UNLOCK;
-				j = 0;
-				while (!change) {
-					pixel.r = 0;
-					pixel.g = pixel.r;
-					pixel.b = (j%2)?0:0xff;
-					LEDS_LOOP_BEGIN
-						ws2812_set_rgb_at(i, &pixel);
-					LEDS_LOOP_END;
-					ws2812_sync();
-					if (++j>=2) {
-						j=0;
-					}
-					_delay_ms(100);
+				MODI_CHANGE( \
+					j = 0; \
+				)
+				pixel.r = 0;
+				pixel.g = pixel.r;
+				pixel.b = (j%2)?0:0xff;
+				LEDS_LOOP_BEGIN
+					ws2812_set_rgb_at(i, &pixel);
+				LEDS_LOOP_END;
+				ws2812_sync();
+				if (++j>=2) {
+					j=0;
 				}
+				_delay_ms(100);
 				break;
 			default:
 				break;
 			}
-			break;
 		default:
 			break;
 		}
 	}
-
-	return 0;
 }
 
 /* enc28j60 interrupt */
 ISR(INT0_vect)
 {
-	uint16_t i, plen, datalen, data_offset, cmdlen, offset, start;
-	uint8_t flags;
+	uint16_t i, plen, datalen, data_offset, cmdlen, offset;
+	uint8_t err = 0;
 	uint8_t *data;
 	struct {
 		uint8_t id[2];
 		rgb color;
 	} pixel;
-
-	enc28j60_writeOp(ENC28J60_BIT_FIELD_CLR, EIE, EIE_INTIE);
+	struct config config_local = config_global;;
 
 	/* parse individual packets */
 	while (enc28j60_readReg(EPKTCNT)) {
@@ -207,7 +171,7 @@ ISR(INT0_vect)
 		if (eth_type_is_arp_and_my_ip(plen) &&
 		    enc28j60_buffer[ETH_ARP_OPCODE_L_P] == ETH_ARP_OPCODE_REQ_L_V) {
 			make_arp_answer_from_request();
-		/* proccess TCP/IPv4 packets */
+		/* proccess UDP/IPv4 packets */
 		} else if (eth_type_is_ip_and_my_ip(plen) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_UDP_V &&
 		           enc28j60_buffer[UDP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[UDP_DST_PORT_L_P] == 0x00 &&
@@ -219,7 +183,7 @@ ISR(INT0_vect)
 			data = enc28j60_buffer + data_offset;
 			cmdlen = data[2] | data[1] << 8;
 			if (datalen >= 3 && cmdlen == (datalen - 3)) {
-				switch (modi = data[0]) {
+				switch (config_local.modi = data[0]) {
 				/*
 				 * ALLSET
 				 * C: "a" + LEN + GRB (3 Bytes)
@@ -231,11 +195,9 @@ ISR(INT0_vect)
 						break;
 					}
 					memcpy(&pixel.color, data + 3, 3);
-					ws2812_locked = 0;
 					LEDS_LOOP_BEGIN
 						ws2812_set_rgb_at(i, &pixel.color);
 					LEDS_LOOP_END;
-					OK;
 					break;
 				/*
 				 * INFORMATION
@@ -254,7 +216,7 @@ ISR(INT0_vect)
 						ERR;
 						break;
 					}
-					switch (animation = data[3]) {
+					switch (config_local.animation = data[3]) {
 					/*
 					 * FARBVERLAUF
 					 * C: "n" + LEN (0x0002) + 0x0100 + [NX1_STEP_PER_CYCLE]
@@ -269,17 +231,12 @@ ISR(INT0_vect)
 						}
 						if (checklen(6)) {
 							for (i = 4; i > 0; i--) {
-								*((uint8_t *) &nx1_step_per_cycle + i - 1) = *(data + 3 + 2 + 4 - i);
+								*((uint8_t *) &(config_local.nx1_step_per_cycle) + i - 1) = *(data + 3 + 2 + 4 - i);
 							}
 						} else {
-							nx1_step_per_cycle = NX1_STEP_PER_CYCLE;
+							config_local.nx1_step_per_cycle = NX1_STEP_PER_CYCLE;
 						}
-						if (data[4]) {
-							dir = 1;
-						} else {
-							dir = 0;
-						}
-						OK;
+						config_local.dir = data[4];
 						break;
 					/*
 					 * KLINGEL
@@ -291,7 +248,6 @@ ISR(INT0_vect)
 					 * C: "n" + LEN (0x0001) + 0x03
 					 */
 					case 3:
-						OK;
 						break;
 					default:
 						ERR;
@@ -313,7 +269,6 @@ ISR(INT0_vect)
 					}
 					enc28j60_set_random_access(6 + data_offset + 5);
 					enc28j60_readBuf(cmdlen - 2, (uint8_t *) (ws2812_buffer + offset * 3));
-					OK;
 					break;
 				/*
 				 * SET
@@ -331,7 +286,6 @@ ISR(INT0_vect)
 						enc28j60_readBuf(5, (uint8_t *) &pixel);
 						ws2812_set_rgb_at(pixel.id[0] << 8 | pixel.id[1], &pixel.color);
 					}
-					OK;
 					break;
 				default:
 					ERR;
@@ -340,11 +294,12 @@ ISR(INT0_vect)
 			} else {
 				ERR;
 			}
+			if (!err) {
+				memcpy(&config_global, &config_local, sizeof(config_global));
+			}
 			makeUdpReply(plen, 49152);
 		}
 
 		enc28j60_freePacketSpace();
 	}
-
-	enc28j60_writeOp(ENC28J60_BIT_FIELD_SET, EIE, EIE_INTIE);
 }

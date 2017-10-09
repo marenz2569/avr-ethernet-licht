@@ -12,7 +12,7 @@ const size_t *ws2812_leds = &ws2812_led;
 
 uint8_t ws2812_set_rgb_at(const uint16_t index, const rgb * const t)
 {
-	if (index < WS2812_LEDS && !ws2812_locked) {
+	if (index < WS2812_LEDS) {
 		memcpy(ws2812_buffer + index, t, 3);
 
 		return 1;

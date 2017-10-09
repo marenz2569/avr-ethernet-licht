@@ -14,6 +14,7 @@
 #include "enc28j60_defs.h"
 #include "ethernet_protocols.h"
 #include "config.h"
+#include "tick.h"
 
 struct config {
 	uint8_t modi,
@@ -44,7 +45,14 @@ struct config {
 #define MODI_CHANGE(x) \
         if (0 != memcmp(&config_global, &config_old, sizeof(config_global))) { \
 					memcpy(&config_old, &config_global, sizeof(config_global)); \
+					async_set(0); \
         	x \
+				}
+
+#define ASYNC_EVERY(t, x) \
+        if (systick >= async_delay) { \
+        	x \
+					async_set(t); \
 				}
 
 uint16_t send_reply_P(const char command, const char *message)
@@ -73,6 +81,8 @@ int main(void)
 
 	DDRB |= _BV(PORTB0);
 
+	tick_init();
+
 	while (!enc28j60_init())
 		_delay_ms(100);
 
@@ -80,6 +90,7 @@ int main(void)
 	EICRA = ~(_BV(ISC01) | _BV(ISC00));
 
 	PORTB |= _BV(PORTB0);
+
 
 	sei();
 
@@ -113,34 +124,36 @@ int main(void)
 				MODI_CHANGE( \
 					j = 0; \
 				)
-				*(&pixel.g+j) = 0xff;
-				*(&pixel.g+(j%3==0?1:0)) = 0;
-				*(&pixel.g+(j%3==2?1:2)) = 0;
-				LEDS_LOOP_BEGIN
-					ws2812_set_rgb_at(i, &pixel);
-				LEDS_LOOP_END;
-				ws2812_sync();
-				if (++j>=3) {
-					j = 0;
-				}
-				_delay_ms(40);
+				ASYNC_EVERY(40, \
+					*(&pixel.g+j) = 0xff; \
+					*(&pixel.g+(j%3==0?1:0)) = 0; \
+					*(&pixel.g+(j%3==2?1:2)) = 0; \
+					LEDS_LOOP_BEGIN \
+						ws2812_set_rgb_at(i, &pixel); \
+					LEDS_LOOP_END; \
+					ws2812_sync(); \
+					if (++j>=3) { \
+						j = 0; \
+					} \
+				)
 				break;
 			/* BLAU/WEISZ */
 			case 3:
 				MODI_CHANGE( \
 					j = 0; \
 				)
-				pixel.r = 0;
-				pixel.g = pixel.r;
-				pixel.b = (j%2)?0:0xff;
-				LEDS_LOOP_BEGIN
-					ws2812_set_rgb_at(i, &pixel);
-				LEDS_LOOP_END;
-				ws2812_sync();
-				if (++j>=2) {
-					j=0;
-				}
-				_delay_ms(100);
+				ASYNC_EVERY(100, \
+					pixel.r = 0; \
+					pixel.g = pixel.r; \
+					pixel.b = (j%2)?0:0xff; \
+					LEDS_LOOP_BEGIN \
+						ws2812_set_rgb_at(i, &pixel); \
+					LEDS_LOOP_END; \
+					ws2812_sync(); \
+					if (++j>=2) { \
+						j=0; \
+					} \
+				)
 				break;
 			default:
 				break;
@@ -161,6 +174,7 @@ ISR(INT0_vect)
 		uint8_t id[2];
 		rgb color;
 	} pixel;
+
 	struct config config_local = config_global;;
 
 	/* parse individual packets */
@@ -302,4 +316,8 @@ ISR(INT0_vect)
 
 		enc28j60_freePacketSpace();
 	}
+}
+
+void user_tick_interrupt(void)
+{
 }

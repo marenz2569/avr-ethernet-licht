@@ -174,8 +174,9 @@ ISR(INT0_vect)
 		uint8_t id[2];
 		rgb color;
 	} pixel;
+	static uint64_t last_packet_tick = 0;
 
-	struct config config_local = config_global;;
+	struct config config_local = config_global;
 
 	/* parse individual packets */
 	while (enc28j60_readReg(EPKTCNT)) {
@@ -189,8 +190,10 @@ ISR(INT0_vect)
 		} else if (eth_type_is_ip_and_my_ip(plen) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_UDP_V &&
 		           enc28j60_buffer[UDP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[UDP_DST_PORT_L_P] == 0x00 &&
-		           (0 == check_checksum(UDP_CHECKSUM_H_P, IP_SRC_P, ((uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8)) + 8, 1)) &&
-		           (0 == check_checksum(IP_CHECKSUM_P, IP_P, IP_HEADER_LEN, 0))) {
+		           //(0 == check_checksum(UDP_CHECKSUM_H_P, IP_SRC_P, ((uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8)) + 8, 1)) &&
+		           //(0 == check_checksum(IP_CHECKSUM_P, IP_P, IP_HEADER_LEN, 0)) &&
+							 last_packet_tick + 33 <= systick) {
+			last_packet_tick = systick;
 			plen = 0;
 			datalen = ((uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8)) - UDP_HEADER_LEN;
 			data_offset = UDP_DATA_P;

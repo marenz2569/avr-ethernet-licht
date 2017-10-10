@@ -190,8 +190,6 @@ ISR(INT0_vect)
 		} else if (eth_type_is_ip_and_my_ip(plen) &&
 		           enc28j60_buffer[IP_PROTO_P] == IP_PROTO_UDP_V &&
 		           enc28j60_buffer[UDP_DST_PORT_H_P] == 0xc0 && enc28j60_buffer[UDP_DST_PORT_L_P] == 0x00 &&
-		           //(0 == check_checksum(UDP_CHECKSUM_H_P, IP_SRC_P, ((uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8)) + 8, 1)) &&
-		           //(0 == check_checksum(IP_CHECKSUM_P, IP_P, IP_HEADER_LEN, 0)) &&
 							 last_packet_tick + 33 <= systick) {
 			last_packet_tick = systick;
 			plen = 0;

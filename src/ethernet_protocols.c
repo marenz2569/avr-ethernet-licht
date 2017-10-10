@@ -72,43 +72,6 @@ static void fill_checksum(uint8_t dest, const uint8_t off, uint16_t len, const u
 	enc28j60_buffer[dest + 1] = ck;
 }
 
-//udp: ((uint16_t) enc28j60_buffer[UDP_LEN_L_P] | (enc28j60_buffer[UDP_LEN_H_P] << 8)) + 8
-//ip : IP_HEADER_LEN
-
-int16_t check_checksum(const uint8_t dest, const uint8_t off, uint16_t len, const uint8_t type)
-{
-	uint32_t sum = type==1?IP_PROTO_UDP_V+len-8:0;
-	uint16_t cs_to_check;
-	uint8_t sreg;
-	memcpy(&cs_to_check, enc28j60_buffer + dest, 2);
-	enc28j60_set_random_access(6 + off);
-	sreg = SREG;
-
-	cli();
-	ENC28J60_enable;
-
-	spi_wrrd(ENC28J60_READ_BUF_MEM);
-
-	while (len > 1) {
-		sum += (uint16_t) (((uint16_t)spi_wrrd(0)<<8)|spi_wrrd(0));
-		len -= 2;
-	}
-	sum -= cs_to_check;
-	if (len) {
-		sum += ((uint32_t) spi_wrrd(0)) << 8;
-	}
-
-	ENC28J60_disable;
-	SREG = sreg;
-
-	while (sum >> 16) {
-		sum = (uint16_t) sum + (sum >> 16);
-	}
-	uint16_t ck = ~(uint16_t)sum;
-
-	return memcmp(&cs_to_check, &ck, 2);
-}
-
 static void make_ip_checksum(void)
 {
 	enc28j60_buffer[IP_FLAGS_P] = 0x40;
